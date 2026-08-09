@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Paleta da marca DPoint */
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+
+  --color-accent-400: #34d399;
+  --color-accent-500: #10b981;
+  --color-accent-600: #059669;
+}
+
+:root {
+  --brand-gradient: linear-gradient(135deg, #4f46e5 0%, #6366f1 45%, #10b981 100%);
+  --brand-gradient-soft: linear-gradient(135deg, #eef2ff 0%, #f0fdf9 100%);
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #f8fafc;
+  color: #1e293b;
+  line-height: 1.5;
+}
+
+:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: #c7d2fe;
+  color: #1e1b4b;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ===== Utilitários de marca ===== */
+
+.bg-brand-gradient {
+  background-image: var(--brand-gradient);
+}
+
+.bg-brand-soft {
+  background-image: var(--brand-gradient-soft);
+}
+
+.text-brand-gradient {
+  background-image: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Cartão com realce sutil de marca */
+.card-brand {
+  position: relative;
+  overflow: hidden;
+}
+.card-brand::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 3px;
+  background-image: var(--brand-gradient);
+}
+
+/* Padrão de pontos para hero / fundos decorativos */
+.bg-dot-pattern {
+  background-image: radial-gradient(circle, #c7d2fe 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* ===== Animações ===== */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 200ms ease-out;
+}
+
+.animate-slideUp {
+  animation: slideUp 300ms ease-out;
+}
+
+@keyframes scan {
+  0% { top: 0; }
+  100% { top: calc(100% - 2px); }
+}
+
+.animate-scan {
+  animation: scan 2s ease-in-out infinite alternate;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.35); }
+  50% { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0); }
+}
+
+.animate-pulseGlow {
+  animation: pulseGlow 2.4s ease-in-out infinite;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}

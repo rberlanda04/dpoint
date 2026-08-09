@@ -1,0 +1,14 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Fotos de evidência dos registros de ponto.
+    // O kiosk de check-in não é autenticado, então a escrita é pública,
+    // mas restrita a imagens de até 2MB.
+    match /evidencias/{registroId} {
+      allow read: if true;
+      allow write: if request.resource.size < 2 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

@@ -1,0 +1,172 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Registro de Ponto Eletrônico - Firebase Blueprint",
+  "description": "Banco de dados Firestore para controle de ponto eletrônico geo-referenciado para funcionários em campo",
+  "entities": {
+    "Funcionario": {
+      "title": "Funcionário",
+      "description": "Cadastro de funcionários autorizados a registrar ponto",
+      "type": "object",
+      "properties": {
+        "id_funcionario": {
+          "type": "string",
+          "description": "Matrícula do funcionário"
+        },
+        "nome": {
+          "type": "string",
+          "description": "Nome completo"
+        },
+        "cargo": {
+          "type": "string",
+          "description": "Cargo ou função"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Ativo", "Inativo"],
+          "description": "Status do funcionário"
+        }
+      },
+      "required": ["id_funcionario", "nome", "cargo", "status"]
+    },
+    "LocalServico": {
+      "title": "Local de Serviço",
+      "description": "Cadastro de obras, shopping ou postos de serviço autorizados",
+      "type": "object",
+      "properties": {
+        "id_local": {
+          "type": "string",
+          "description": "Código identificador do local"
+        },
+        "nome_empresa": {
+          "type": "string",
+          "description": "Nome da obra ou empresa"
+        },
+        "cidade": {
+          "type": "string",
+          "description": "Cidade"
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Latitude geográfica"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude geográfica"
+        },
+        "raio_metros": {
+          "type": "number",
+          "description": "Raio de tolerância em metros para geofencing"
+        }
+      },
+      "required": ["id_local", "nome_empresa", "cidade", "latitude", "longitude", "raio_metros"]
+    },
+    "RegistroPonto": {
+      "title": "Registro de Ponto",
+      "description": "Log de check-in e check-out dos funcionários com coordenadas GPS",
+      "type": "object",
+      "properties": {
+        "id_registro": {
+          "type": "string",
+          "description": "Identificador do registro"
+        },
+        "id_funcionario": {
+          "type": "string",
+          "description": "Matrícula do funcionário"
+        },
+        "nome_funcionario": {
+          "type": "string",
+          "description": "Nome do funcionário (cached)"
+        },
+        "id_local": {
+          "type": "string",
+          "description": "Identificador do local"
+        },
+        "nome_local": {
+          "type": "string",
+          "description": "Nome do local (cached)"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": ["Check-in", "Check-out"],
+          "description": "Tipo de ponto"
+        },
+        "data_hora": {
+          "type": "string",
+          "description": "Data e hora no formato ISO"
+        },
+        "latitude_registro": {
+          "type": "number",
+          "description": "Latitude de registro"
+        },
+        "longitude_registro": {
+          "type": "number",
+          "description": "Longitude de registro"
+        },
+        "observacao": {
+          "type": "string",
+          "description": "Observações do funcionário"
+        },
+        "precisao_gps": {
+          "type": "number",
+          "description": "Precisão do GPS em metros"
+        },
+        "fotos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Imagens em base64 anexadas"
+        }
+      },
+      "required": [
+        "id_registro",
+        "id_funcionario",
+        "id_local",
+        "tipo",
+        "data_hora",
+        "latitude_registro",
+        "longitude_registro",
+        "precisao_gps"
+      ]
+    },
+    "Config": {
+      "title": "Configuração",
+      "description": "Configurações gerais do sistema",
+      "type": "object",
+      "properties": {
+        "gasUrl": {
+          "type": "string",
+          "description": "URL do Google Apps Script"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["gas", "firebase"],
+          "description": "Modo de persistência do banco"
+        },
+        "driveFolderId": {
+          "type": "string",
+          "description": "ID da pasta do Drive"
+        }
+      },
+      "required": ["mode"]
+    }
+  },
+  "firestore": {
+    "funcionarios/{id_funcionario}": {
+      "schema": "Funcionario",
+      "description": "Lista de funcionários para consulta e ponto"
+    },
+    "locais/{id_local}": {
+      "schema": "LocalServico",
+      "description": "Lista de locais autorizados de geofence"
+    },
+    "registros/{id_registro}": {
+      "schema": "RegistroPonto",
+      "description": "Histórico de marcações de ponto"
+    },
+    "config/system": {
+      "schema": "Config",
+      "description": "Configuração global do sistema"
+    }
+  }
+}

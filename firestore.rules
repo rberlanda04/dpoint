@@ -1,0 +1,109 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'r.berlanda04@gmail.com';
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isEmpresaAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/empresa_admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/empresa_admins/$(request.auth.uid)).data.ativo == true;
+    }
+
+    // NOTA DE ARQUITETURA:
+    // O kiosk público (/checkin) funciona SEM login, por isso 'funcionarios'
+    // e 'locais' têm leitura pública. O trade-off é que nomes de funcionários
+    // ativos ficam visíveis publicamente (necessário para o kiosk).
+    // Para isolamento total por empresa, o próximo passo é exigir autenticação
+    // (ex.: PIN do funcionário) também no kiosk.
+
+    // FUNCIONÁRIOS
+    match /funcionarios/{funcionarioId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin() || isEmpresaAdmin();
+    }
+
+    // LOCAIS DE SERVIÇO
+    match /locais/{localId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin() || isEmpresaAdmin();
+    }
+
+    // REGISTROS DE PONTO
+    // - create público: o kiosk /checkin funciona sem login, mas o documento
+    //   precisa ter os campos obrigatórios válidos (anti-spam básico).
+    // - leitura/edição/exclusão apenas para usuários autenticados.
+    match /registros/{registroId} {
+      allow read: if isAuthenticated();
+      allow create: if request.resource.data.keys().hasAll(
+          ['id_funcionario', 'id_local', 'tipo', 'data_hora']
+        )
+        && request.resource.data.tipo in ['Check-in', 'Check-out']
+        && request.resource.data.id_funcionario is string
+        && request.resource.data.id_local is string
+        && request.resource.data.data_hora is string;
+      allow update, delete: if isAdmin() || isEmpresaAdmin();
+    }
+
+    // CONFIGURAÇÕES DO SISTEMA — leitura pública (kiosk precisa dos toggles),
+    // escrita apenas para admins.
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin() || isEmpresaAdmin();
+    }
+
+    // SaaS - EMPRESAS (super admin only)
+    match /empresas/{empresaId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // SaaS - VENDAS (super admin only)
+    match /vendas/{vendaId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // SaaS - ACCESS KEYS (super admin only)
+    match /access_keys/{keyId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // EMPRESA ADMINS (super admin, ou self-create para o fluxo de convite)
+    // list para autenticados: necessário ao fallback de login por e-mail;
+    // expõe apenas e-mails/nomes de admins a usuários logados.
+    match /empresa_admins/{adminUid} {
+      allow get: if isAdmin() || (isAuthenticated() && request.auth.uid == adminUid);
+      allow list: if isAuthenticated();
+      allow create: if isAdmin() || (isAuthenticated() && request.auth.uid == adminUid);
+      allow update: if isAdmin() || (isAuthenticated() && request.auth.uid == adminUid);
+      allow delete: if isAdmin();
+    }
+
+    // TRABALHADORES AVULSOS (B2C)
+    match /trabalhadores/{trabalhadorId} {
+      allow read: if isAuthenticated() && request.auth.uid == trabalhadorId;
+      allow create: if isAuthenticated() && request.auth.uid == trabalhadorId;
+      allow update: if isAuthenticated() && request.auth.uid == trabalhadorId;
+      allow delete: if isAdmin();
+    }
+
+    // CONVITES
+    // O ID do documento É o próprio token (48+ caracteres aleatórios seguros).
+    // - get público: quem possui o link/token valida apenas aquele convite.
+    // - list (consultas) somente para admins: impede varredura de todos os convites.
+    match /invitations/{token} {
+      allow get: if true;
+      allow list: if isAdmin() || isEmpresaAdmin();
+      allow create, update: if isAdmin() || isEmpresaAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}

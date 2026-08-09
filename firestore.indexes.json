@@ -1,0 +1,12 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "registros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresa_id", "order": "ASCENDING" },
+        { "fieldPath": "data_hora", "order": "DESCENDING" }
+      ]
+    }
+  ]
+}
