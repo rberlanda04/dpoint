@@ -26,11 +26,13 @@ import {
   Sparkles,
   Send,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Download
 } from 'lucide-react';
 import Logo from '../components/Logo';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import { useI18n } from '../i18n';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 
 // Import images
 import img1 from '../imgs/construction-worker-with-document-plan-working-inside-building-construction-site.jpg';
@@ -41,6 +43,7 @@ import img6 from '../imgs/worker-is-cutting-wires-with-lineman-s-pliers.jpg';
 export default function LandingPage() {
   const navigate = useNavigate();
   const { t, lang } = useI18n();
+  const { isInstallable, promptInstall } = usePWAInstall();
 
   // Demo Live Tracker state for the hero widget
   const [demoActive, setDemoActive] = useState(true);
@@ -127,6 +130,15 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
+            {isInstallable && (
+              <button
+                onClick={promptInstall}
+                className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-xl transition-all cursor-pointer border border-emerald-200"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Instalar App
+              </button>
+            )}
             <button
               onClick={() => navigate('/login')}
               className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-all cursor-pointer border-0"
