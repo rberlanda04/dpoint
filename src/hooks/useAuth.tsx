@@ -191,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (inviteData.role === 'empresa_admin') {
           const adminData: EmpresaAdmin = {
             uid: firebaseUser.uid,
-            email: firebaseUser.email!,
+            email: normalizedEmail,
             nome: inviteData.nome || '',
             empresa_id: inviteData.empresa_id,
             empresa_nome: inviteData.empresa_nome,
@@ -206,20 +206,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (inviteData.role === 'funcionario') {
+          // Try to find and activate existing funcionario
           const funcQuery2 = query(
             collection(db, 'funcionarios'),
-            where('email', '==', firebaseUser.email)
+            where('email', '==', normalizedEmail)
           );
           const funcSnap2 = await getDocs(funcQuery2);
           if (!funcSnap2.empty) {
-            await updateDoc(funcSnap2.docs[0].ref, { status: 'Ativo' });
+            await updateDoc(funcSnap2.docs[0].ref, { status: 'Ativo', email: normalizedEmail, uid: firebaseUser.uid });
+          } else {
+            // No matching funcionario — create one from invitation data
+            const newFuncId = `invite_${firebaseUser.uid.substring(0, 8)}`;
+            await setDoc(doc(db, 'funcionarios', newFuncId), {
+              uid: firebaseUser.uid,
+              nome: inviteData.nome || normalizedEmail.split('@')[0],
+              cargo: 'Funcionário',
+              email: normalizedEmail,
+              empresa_id: inviteData.empresa_id || '',
+              status: 'Ativo',
+            });
           }
           await updateDoc(inviteDoc.ref, { status: 'used', used_at: new Date().toISOString() });
           return 'funcionario';
         }
       }
-    } catch {
-      // Sem permissão para listar convites
+
+      // 6b. Invitation already used — ensure funcionario doc exists
+      const usedInviteQuery = query(
+        collection(db, 'invitations'),
+        where('email', '==', normalizedEmail),
+        where('status', '==', 'used')
+      );
+      const usedSnap = await getDocs(usedInviteQuery);
+      if (!usedSnap.empty) {
+        const usedInvite = usedSnap.docs[0].data() as any;
+        if (usedInvite.role === 'funcionario') {
+          // Check if funcionario doc exists
+          const funcCheck = query(
+            collection(db, 'funcionarios'),
+            where('email', '==', normalizedEmail)
+          );
+          const funcCheckSnap = await getDocs(funcCheck);
+          if (funcCheckSnap.empty) {
+            // Create funcionario from used invitation
+            const newFuncId = `invite_${firebaseUser.uid.substring(0, 8)}`;
+            await setDoc(doc(db, 'funcionarios', newFuncId), {
+              uid: firebaseUser.uid,
+              nome: usedInvite.nome || normalizedEmail.split('@')[0],
+              cargo: 'Funcionário',
+              email: normalizedEmail,
+              empresa_id: usedInvite.empresa_id || '',
+              status: 'Ativo',
+            });
+          } else {
+            // Ensure uid and email are set on existing doc
+            const existingDoc = funcCheckSnap.docs[0];
+            const existingData = existingDoc.data();
+            const updates: Record<string, unknown> = {};
+            if (!existingData.email) updates.email = normalizedEmail;
+            if (!existingData.uid) updates.uid = firebaseUser.uid;
+            if (existingData.status !== 'Ativo') updates.status = 'Ativo';
+            if (Object.keys(updates).length > 0) {
+              await updateDoc(existingDoc.ref, updates);
+            }
+          }
+          return 'funcionario';
+        }
+        if (usedInvite.role === 'empresa_admin') {
+          return 'empresa_admin';
+        }
+      }
+    } catch (e) {
+      console.warn('[Auth] Step 6: invitation check error:', e);
     }
 
     // 7. Bootstrap: only if config/super_admin_emails exists and user's email is listed
