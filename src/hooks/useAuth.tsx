@@ -231,12 +231,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Se não encontrou em nenhuma coleção, NÃO cria automaticamente
-    // Usuário deve se cadastrar primeiro via /register ou ser convidado
-    console.log('[Auth] No role found — signing out');
-    setAccessError(t('auth.emailNotRegistered'));
-    await signOut(auth);
-    return 'none';
+    // Se não encontrou em nenhuma coleção, criar como trabalhador avulso
+    // (conta existe no Auth mas o doc Firestore não foi criado — race condition ou login Google)
+    console.log('[Auth] No role found — auto-creating trabalhador profile');
+    try {
+      const trabajhadorRef = doc(db, 'trabalhadores', firebaseUser.uid);
+      const trabajhadorSnap = await getDoc(trabajhadorRef);
+      if (!trabajhadorSnap.exists()) {
+        await setDoc(trabajhadorRef, {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          nome: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Trabalhador',
+          tipo: 'independente',
+          data_criacao: new Date().toISOString().split('T')[0],
+          status: 'Ativo',
+        });
+        console.log('[Auth] Auto-created trabalhadores doc');
+      }
+      return 'trabalhador_avulso';
+    } catch (e) {
+      console.error('[Auth] Failed to auto-create trabalhadores doc:', e);
+      setAccessError(t('auth.emailNotRegistered'));
+      await signOut(auth);
+      return 'none';
+    }
   };
 
   const isSuperAdmin = userRole === 'super_admin';
