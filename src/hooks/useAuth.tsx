@@ -218,15 +218,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-      // Se não encontrou em nenhuma coleção, NÃO cria automaticamente
-      // Usuário deve se cadastrar primeiro via /register ou ser convidado
-      setAccessError(t('auth.emailNotRegistered'));
-      await signOut(auth);
-      return 'none';
-    } catch (error) {
-      console.error('Erro ao carregar role do usuário:', error);
-      return 'none';
-    }
+    // Se não encontrou em nenhuma coleção, NÃO cria automaticamente
+    // Usuário deve se cadastrar primeiro via /register ou ser convidado
+    setAccessError(t('auth.emailNotRegistered'));
+    await signOut(auth);
+    return 'none';
   };
 
   const isSuperAdmin = userRole === 'super_admin';
