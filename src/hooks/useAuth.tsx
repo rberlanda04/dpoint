@@ -60,21 +60,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadUserRole = async (firebaseUser: FirebaseUser): Promise<UserRole> => {
+    console.log(`[Auth] loadUserRole start for ${firebaseUser.email} (uid: ${firebaseUser.uid})`);
+
     // 1. Check super_admins collection by UID
     let hasSuperAdminDoc = false;
     try {
       const superAdminDoc = await getDoc(doc(db, 'super_admins', firebaseUser.uid));
       if (superAdminDoc.exists() && superAdminDoc.data().ativo === true) {
+        console.log('[Auth] Step 1: Found active super_admins doc → super_admin');
         return 'super_admin';
       }
       hasSuperAdminDoc = superAdminDoc.exists();
+      console.log(`[Auth] Step 1: super_admins exists=${superAdminDoc.exists()}, hasSuperAdminDoc=${hasSuperAdminDoc}`);
     } catch (e) {
-      console.warn('super_admins read error:', e);
+      console.warn('[Auth] Step 1: super_admins read error:', e);
     }
 
     // 2. Check empresa_admins by UID
     try {
       const adminDoc = await getDoc(doc(db, 'empresa_admins', firebaseUser.uid));
+      console.log(`[Auth] Step 2: empresa_admins UID exists=${adminDoc.exists()}`);
       if (adminDoc.exists()) {
         const data = adminDoc.data() as EmpresaAdmin;
         if (data.ativo) {
@@ -204,7 +209,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const configDoc = await getDoc(configRef);
         if (configDoc.exists()) {
           const emails: string[] = configDoc.data().emails || [];
+          console.log(`[Auth] Step 7: config/super_admin_emails exists, emails=${JSON.stringify(emails)}, hasSuperAdminDoc=${hasSuperAdminDoc}`);
           if (emails.includes(firebaseUser.email) && !hasSuperAdminDoc) {
+            console.log(`[Auth] Step 7: CREATING super_admins doc for ${firebaseUser.email}`);
             await setDoc(doc(db, 'super_admins', firebaseUser.uid), {
               email: firebaseUser.email,
               ativo: true,
@@ -212,14 +219,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             return 'super_admin';
           }
+        } else {
+          console.log('[Auth] Step 7: config/super_admin_emails does NOT exist — skipping bootstrap');
         }
       } catch (e) {
-        console.error('Bootstrap error:', e);
+        console.error('[Auth] Step 7: Bootstrap error:', e);
       }
     }
 
     // Se não encontrou em nenhuma coleção, NÃO cria automaticamente
     // Usuário deve se cadastrar primeiro via /register ou ser convidado
+    console.log('[Auth] No role found — signing out');
     setAccessError(t('auth.emailNotRegistered'));
     await signOut(auth);
     return 'none';
