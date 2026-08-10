@@ -28,13 +28,21 @@ service cloud.firestore {
     }
 
     // Verifica se o recurso EXISTENTE pertence à empresa do admin logado.
+    // Uses exists() guard to avoid get() throwing on non-existent empresa_admins doc.
     function ownsEmpresaId(empresaIdField) {
-      return isAdmin() || (isEmpresaAdmin() && resource.data[empresaIdField] == getEmpresaId());
+      return isAdmin()
+        || (isAuthenticated()
+            && exists(/databases/$(database)/documents/empresa_admins/$(request.auth.uid))
+            && resource.data[empresaIdField] == getEmpresaId());
     }
 
     // Verifica se o recurso NOVO pertence à empresa do admin logado.
+    // Uses exists() guard to avoid get() throwing on non-existent empresa_admins doc.
     function requestOwnsEmpresaId(empresaIdField) {
-      return isAdmin() || (isEmpresaAdmin() && request.resource.data[empresaIdField] == getEmpresaId());
+      return isAdmin()
+        || (isAuthenticated()
+            && exists(/databases/$(database)/documents/empresa_admins/$(request.auth.uid))
+            && request.resource.data[empresaIdField] == getEmpresaId());
     }
 
     // Verifica se o usuário autenticado é funcionário da mesma empresa do recurso.
@@ -59,12 +67,20 @@ service cloud.firestore {
         || (isEmpresaAdmin() && resource.data.empresa_id == getEmpresaId())
         || isAuthenticated();
       allow list: if isAuthenticated();
-      allow create: if isAuthenticated() && requestOwnsEmpresaId('empresa_id');
+      // Invite flow: employee can create their own doc if it contains their uid.
+      allow create: if isAuthenticated() && (
+        requestOwnsEmpresaId('empresa_id')
+        || (request.resource.data.keys().hasAny(['uid'])
+            && request.resource.data.uid == request.auth.uid)
+      );
+      // Invite flow: employee can claim an unclaimed doc (no uid field) or update their own (uid matches).
       allow update: if ownsEmpresaId('empresa_id')
         || (isAuthenticated() && (
           resource.data.email == request.auth.email
           || resource.data.email == ''
           || !resource.data.keys().hasAny(['email'])
+          || (resource.data.keys().hasAny(['uid']) && resource.data.uid == request.auth.uid)
+          || !resource.data.keys().hasAny(['uid'])
         ));
       allow delete: if ownsEmpresaId('empresa_id');
     }
