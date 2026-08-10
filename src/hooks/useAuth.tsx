@@ -142,18 +142,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Permission denied for funcionarios list — continue
     }
 
-    // 5. Check trabalhadores collection (B2C workers)
+    // 5. Check trabalhadores collection (B2C workers) — by UID
     try {
-      const trabalhadorQuery = query(
-        collection(db, 'trabalhadores'),
-        where('email', '==', firebaseUser.email)
-      );
-      const trabalhadorSnap = await getDocs(trabalhadorQuery);
-      if (!trabalhadorSnap.empty) {
+      const trabalhadorDoc = await getDoc(doc(db, 'trabalhadores', firebaseUser.uid));
+      console.log(`[Auth] Step 5: trabalhadores UID exists=${trabalhadorDoc.exists()}`);
+      if (trabalhadorDoc.exists()) {
         return 'trabalhador_avulso';
       }
-    } catch {
-      // Permission denied for trabalhadores list — continue
+    } catch (e) {
+      console.warn('[Auth] Step 5: trabalhadores read error:', e);
     }
 
     // 6. Check for pending invitations
