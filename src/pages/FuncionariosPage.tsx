@@ -71,7 +71,7 @@ export default function FuncionariosPage() {
         id_funcionario: id,
         nome: newFunc.nome.trim(),
         cargo: newFunc.cargo.trim(),
-        email: newFunc.email.trim() || undefined,
+        email: newFunc.email.trim(),
         empresa_id: empresaAdmin?.empresa_id || '',
         status: 'Ativo',
       };

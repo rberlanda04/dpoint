@@ -192,15 +192,15 @@ export default function ConfigPage() {
       </div>
 
       <Dialog
-        isOpen={showClearDialog}
+        open={showClearDialog}
         onClose={() => setShowClearDialog(false)}
         title={t('config.clearConfirm')}
         description={t('config.dangerDesc')}
-        confirmText={t('common.confirm')}
-        cancelText={t('common.cancel')}
+        confirmLabel={t('common.confirm')}
+        cancelLabel={t('common.cancel')}
         onConfirm={handleClearRecords}
         variant="danger"
-        isLoading={clearing}
+        loading={clearing}
       />
     </div>
   );

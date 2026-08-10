@@ -340,7 +340,7 @@ const pt = {
   'portal.companies.new': 'Nova Empresa',
   'portal.companies.search': 'Buscar por nome, ID ou CNPJ...',
   'portal.companies.legalName': 'Razão Social',
-  'portal.companies.cnpjPlaceholder': '00.000.000/0000-00',
+  'portal.companies.cnpjPlaceholder': 'CNPJ ou ID fiscal (opcional)',
   'portal.companies.invalidCnpj': 'CNPJ inválido. Verifique o número digitado.',
   'portal.companies.idPreview': 'ID: {id}',
   'portal.companies.adminInvite': 'Convite do Administrador',

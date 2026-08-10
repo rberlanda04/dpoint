@@ -76,6 +76,19 @@ export default function InvitePage() {
         await updateDoc(funcSnap.docs[0].ref, {
           status: 'Ativo',
         });
+      } else if (invitation.nome && invitation.empresa_id) {
+        const nameQuery = query(
+          collection(db, 'funcionarios'),
+          where('nome', '==', invitation.nome),
+          where('empresa_id', '==', invitation.empresa_id)
+        );
+        const nameSnap = await getDocs(nameQuery);
+        if (!nameSnap.empty) {
+          await updateDoc(nameSnap.docs[0].ref, {
+            status: 'Ativo',
+            email: invitation.email,
+          });
+        }
       }
     }
 

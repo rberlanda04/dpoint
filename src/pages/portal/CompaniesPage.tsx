@@ -10,34 +10,8 @@ import { PLANS } from '../../data/saasData';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
 
 function formatCNPJ(value: string): string {
-  const nums = value.replace(/\D/g, '').slice(0, 14);
-  if (nums.length <= 2) return nums;
-  if (nums.length <= 5) return `${nums.slice(0, 2)}.${nums.slice(2)}`;
-  if (nums.length <= 8) return `${nums.slice(0, 2)}.${nums.slice(2, 5)}.${nums.slice(5)}`;
-  if (nums.length <= 12) return `${nums.slice(0, 2)}.${nums.slice(2, 5)}.${nums.slice(5, 8)}/${nums.slice(8, 12)}`;
-  return `${nums.slice(0, 2)}.${nums.slice(2, 5)}.${nums.slice(5, 8)}/${nums.slice(8, 12)}-${nums.slice(12, 14)}`;
-}
-
-function isValidCNPJ(cnpj: string): boolean {
-  const nums = cnpj.replace(/\D/g, '');
-  if (nums.length !== 14) return false;
-  if (/^(\d)\1+$/.test(nums)) return false;
-  let sum = 0;
-  let weight = 2;
-  for (let i = 11; i >= 0; i--) {
-    sum += parseInt(nums[i]) * weight;
-    weight = weight === 9 ? 2 : weight + 1;
-  }
-  let digit1 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
-  if (parseInt(nums[12]) !== digit1) return false;
-  sum = 0;
-  weight = 2;
-  for (let i = 12; i >= 0; i--) {
-    sum += parseInt(nums[i]) * weight;
-    weight = weight === 9 ? 2 : weight + 1;
-  }
-  let digit2 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
-  return parseInt(nums[13]) === digit2;
+  const nums = value.replace(/\D/g, '').slice(0, 20);
+  return nums;
 }
 
 export default function CompaniesPage() {
@@ -94,11 +68,6 @@ export default function CompaniesPage() {
     setError('');
 
     const cleanCnpj = newEmpresa.cnpj.replace(/\D/g, '');
-    if (!isValidCNPJ(cleanCnpj)) {
-      setError(t('portal.companies.invalidCnpj'));
-      setSaving(false);
-      return;
-    }
 
     const id = generateId();
     const empresa: Empresa = {
@@ -207,8 +176,7 @@ export default function CompaniesPage() {
                 placeholder={t('portal.companies.cnpjPlaceholder')}
                 value={formatCNPJ(newEmpresa.cnpj)}
                 onChange={(e) => setNewEmpresa({ ...newEmpresa, cnpj: e.target.value })}
-                required
-                icon={<span>CNPJ</span>}
+                icon={<span>CNPJ/ID</span>}
               />
               <select
                 value={newEmpresa.plano}

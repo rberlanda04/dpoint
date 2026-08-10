@@ -127,12 +127,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userSnap = await getDocs(userQuery);
       console.log(`[Auth] Step 4: funcionarios email query empty=${userSnap.empty}, count=${userSnap.size}`);
       if (!userSnap.empty) {
+        const funcDoc = userSnap.docs[0];
+        const funcData = funcDoc.data();
+        console.log(`[Auth] Step 4: found func doc id=${funcDoc.id}, status=${funcData.status}, email=${funcData.email}`);
         const trabalhadorDoc = await getDoc(doc(db, 'trabalhadores', firebaseUser.uid));
         if (trabalhadorDoc.exists()) {
           return 'trabalhador_avulso';
         }
-        const funcData = userSnap.docs[0].data();
-        console.log(`[Auth] Step 4: funcionario status=${funcData.status}`);
         if (funcData.status === 'Ativo') {
           return 'funcionario';
         } else {
@@ -231,30 +232,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Se não encontrou em nenhuma coleção, criar como trabalhador avulso
-    // (conta existe no Auth mas o doc Firestore não foi criado — race condition ou login Google)
-    console.log('[Auth] No role found — auto-creating trabalhador profile');
-    try {
-      const trabajhadorRef = doc(db, 'trabalhadores', firebaseUser.uid);
-      const trabajhadorSnap = await getDoc(trabajhadorRef);
-      if (!trabajhadorSnap.exists()) {
-        await setDoc(trabajhadorRef, {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          nome: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Trabalhador',
-          tipo: 'independente',
-          data_criacao: new Date().toISOString().split('T')[0],
-          status: 'Ativo',
-        });
-        console.log('[Auth] Auto-created trabalhadores doc');
+    // 8. Se não encontrou em nenhuma coleção:
+    // Verificar se a intenção explicitamente era logar/cadastrar como Trabalhador Free (B2C)
+    const authIntent = sessionStorage.getItem('ponto_auth_intent');
+    sessionStorage.removeItem('ponto_auth_intent');
+
+    if (authIntent === 'trabalhador') {
+      console.log('[Auth] Intent is trabalhador — creating free worker profile');
+      try {
+        const trabajhadorRef = doc(db, 'trabalhadores', firebaseUser.uid);
+        const trabajhadorSnap = await getDoc(trabajhadorRef);
+        if (!trabajhadorSnap.exists()) {
+          await setDoc(trabajhadorRef, {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            nome: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Trabalhador',
+            tipo: 'independente',
+            data_criacao: new Date().toISOString().split('T')[0],
+            status: 'Ativo',
+          });
+          console.log('[Auth] Auto-created trabalhadores doc');
+        }
+        return 'trabalhador_avulso';
+      } catch (e) {
+        console.error('[Auth] Failed to create worker profile:', e);
       }
-      return 'trabalhador_avulso';
-    } catch (e) {
-      console.error('[Auth] Failed to auto-create trabalhadores doc:', e);
-      setAccessError(t('auth.emailNotRegistered'));
-      await signOut(auth);
-      return 'none';
     }
+
+    // Se a intenção era Empresa ou Funcionário e o e-mail não possui autorização:
+    console.log('[Auth] Email not registered in authorized collections — denying access');
+    setAccessError(t('auth.emailNotRegistered'));
+    await signOut(auth);
+    return 'none';
   };
 
   const isSuperAdmin = userRole === 'super_admin';

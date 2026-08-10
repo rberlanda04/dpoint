@@ -94,6 +94,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
+      sessionStorage.setItem('ponto_auth_intent', tab);
       await login(email, password);
     } catch (err: any) {
       const msg = err.message || '';
@@ -110,7 +111,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      // Auto-criar trabalhador apenas se estiver na aba "trabalhador"
+      sessionStorage.setItem('ponto_auth_intent', tab);
       await loginWithGoogle(tab === 'trabalhador');
     } catch (err: any) {
       setError(mapAuthError(err.message || ''));

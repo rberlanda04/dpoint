@@ -138,6 +138,11 @@ body {
   animation: pulseGlow 2.4s ease-in-out infinite;
 }
 
+/* iOS safe area for bottom tab bar */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 @media print {
   .no-print { display: none !important; }
   body { background: white; }

@@ -173,13 +173,16 @@ export class FirebaseService {
   public async cadastrarFuncionario(funcionario: Funcionario): Promise<void> {
     try {
       const docRef = doc(db, 'funcionarios', funcionario.id_funcionario);
-      await setDoc(docRef, {
+      const data: Record<string, unknown> = {
         nome: funcionario.nome,
         cargo: funcionario.cargo,
         status: funcionario.status,
-        email: funcionario.email || '',
         empresa_id: funcionario.empresa_id || '',
-      });
+      };
+      if (funcionario.email) {
+        data.email = funcionario.email;
+      }
+      await setDoc(docRef, data);
     } catch (error) {
       console.error('Erro ao cadastrar funcionário no Firestore:', error);
       throw error;

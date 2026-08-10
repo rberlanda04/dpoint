@@ -342,7 +342,7 @@ const en: Record<TranslationKey, string> = {
   'portal.companies.new': 'New Company',
   'portal.companies.search': 'Search by name, ID or tax number...',
   'portal.companies.legalName': 'Legal Name',
-  'portal.companies.cnpjPlaceholder': '00.000.000/0000-00',
+  'portal.companies.cnpjPlaceholder': 'Tax ID (optional)',
   'portal.companies.invalidCnpj': 'Invalid CNPJ. Check the number entered.',
   'portal.companies.idPreview': 'ID: {id}',
   'portal.companies.adminInvite': 'Administrator Invitation',
