@@ -249,7 +249,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const registerWorker = async (email: string, password: string, name: string) => {
-    throw new Error('Self-registration is disabled. Contact your company to get access.');
+    setAccessError(null);
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    await setDoc(doc(db, 'trabalhadores', userCredential.user.uid), {
+      uid: userCredential.user.uid,
+      email: email,
+      nome: name,
+      tipo: 'independente',
+      data_criacao: new Date().toISOString().split('T')[0],
+      status: 'Ativo',
+    });
   };
 
   const loginWithGoogle = async (autoCreateWorker = false) => {
