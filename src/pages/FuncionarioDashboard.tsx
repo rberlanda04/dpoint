@@ -20,13 +20,22 @@ export default function FuncionarioDashboard() {
       
       const normalizedEmail = user.email.trim().toLowerCase();
       const db = await dataService.loadAllData();
-      const loggedFunc = db.funcionarios.find((f: any) => 
+      
+      // Try to find by email first
+      let loggedFunc = db.funcionarios.find((f: any) => 
         f.email && f.email.trim().toLowerCase() === normalizedEmail
       );
       
+      // Fallback: find by uid field (set during invite acceptance)
+      if (!loggedFunc) {
+        loggedFunc = db.funcionarios.find((f: any) => 
+          (f as any).uid === user.uid
+        );
+      }
+      
       if (loggedFunc) {
         setFuncionario(loggedFunc);
-        const myRecords = db.registros.filter((r: any) => r.id_funcionario === loggedFunc.id_funcionario);
+        const myRecords = db.registros.filter((r: any) => r.id_funcionario === loggedFunc!.id_funcionario);
         setRegistros(myRecords);
       }
       setLoading(false);

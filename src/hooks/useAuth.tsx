@@ -144,6 +144,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return 'none';
         }
       }
+      // Fallback: check by uid field (set during invite acceptance)
+      const uidQuery = query(
+        collection(db, 'funcionarios'),
+        where('uid', '==', firebaseUser.uid)
+      );
+      const uidSnap = await getDocs(uidQuery);
+      if (!uidSnap.empty) {
+        const funcData = uidSnap.docs[0].data();
+        if (funcData.status === 'Ativo') {
+          return 'funcionario';
+        }
+      }
     } catch (e) {
       console.warn('[Auth] Step 4: funcionarios email query error:', e);
     }

@@ -36,7 +36,7 @@ export default function InvitePage() {
     if (status !== 'valid' || !invitation) return;
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser && firebaseUser.email === invitation.email) {
+      if (firebaseUser && firebaseUser.email?.trim().toLowerCase() === invitation.email.trim().toLowerCase()) {
         setLoading(true);
         try {
           await acceptInviteWithUid(firebaseUser.uid);
@@ -68,6 +68,7 @@ export default function InvitePage() {
       };
       await setDoc(doc(db, 'empresa_admins', firebaseUid), adminData);
     } else {
+      // 1. Try to find by email
       const funcQuery = query(
         collection(db, 'funcionarios'),
         where('email', '==', inviteEmail)
@@ -77,8 +78,10 @@ export default function InvitePage() {
         await updateDoc(funcSnap.docs[0].ref, {
           status: 'Ativo',
           email: inviteEmail,
+          uid: firebaseUid,
         });
       } else if (invitation.nome && invitation.empresa_id) {
+        // 2. Try to find by name + empresa_id
         const nameQuery = query(
           collection(db, 'funcionarios'),
           where('nome', '==', invitation.nome),
@@ -89,6 +92,18 @@ export default function InvitePage() {
           await updateDoc(nameSnap.docs[0].ref, {
             status: 'Ativo',
             email: inviteEmail,
+            uid: firebaseUid,
+          });
+        } else {
+          // 3. No matching funcionario found — create one from invitation data
+          const newFuncId = `invite_${firebaseUid.substring(0, 8)}`;
+          await setDoc(doc(db, 'funcionarios', newFuncId), {
+            uid: firebaseUid,
+            nome: invitation.nome || inviteEmail.split('@')[0],
+            cargo: 'Funcionário',
+            email: inviteEmail,
+            empresa_id: invitation.empresa_id || '',
+            status: 'Ativo',
           });
         }
       }

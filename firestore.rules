@@ -61,7 +61,11 @@ service cloud.firestore {
       allow list: if isAuthenticated();
       allow create: if isAuthenticated() && requestOwnsEmpresaId('empresa_id');
       allow update: if ownsEmpresaId('empresa_id')
-        || (isAuthenticated() && resource.data.email == request.auth.email);
+        || (isAuthenticated() && (
+          resource.data.email == request.auth.email
+          || resource.data.email == ''
+          || !resource.data.keys().hasAny(['email'])
+        ));
       allow delete: if ownsEmpresaId('empresa_id');
     }
 
