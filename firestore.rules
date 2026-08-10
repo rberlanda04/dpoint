@@ -60,7 +60,8 @@ service cloud.firestore {
         || isAuthenticated();
       allow list: if isAuthenticated();
       allow create: if isAuthenticated() && requestOwnsEmpresaId('empresa_id');
-      allow update: if ownsEmpresaId('empresa_id');
+      allow update: if ownsEmpresaId('empresa_id')
+        || (isAuthenticated() && resource.data.email == request.auth.email);
       allow delete: if ownsEmpresaId('empresa_id');
     }
 
@@ -145,7 +146,8 @@ service cloud.firestore {
     match /invitations/{token} {
       allow get: if true;
       allow list: if isAdmin() || isEmpresaAdmin();
-      allow create, update: if isAdmin() || isEmpresaAdmin();
+      allow create: if isAdmin() || isEmpresaAdmin();
+      allow update: if isAdmin() || isEmpresaAdmin() || isAuthenticated();
       allow delete: if isAdmin();
     }
   }
