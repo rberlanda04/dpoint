@@ -97,9 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 3. Check empresa_admins by email
     try {
+      const normalizedEmail = firebaseUser.email?.trim().toLowerCase() || '';
       const adminEmailQuery = query(
         collection(db, 'empresa_admins'),
-        where('email', '==', firebaseUser.email)
+        where('email', '==', normalizedEmail)
       );
       const adminSnap = await getDocs(adminEmailQuery);
       console.log(`[Auth] Step 3: empresa_admins email query empty=${adminSnap.empty}`);
@@ -120,9 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 4. Check funcionarios collection
     try {
+      const normalizedEmail = firebaseUser.email?.trim().toLowerCase() || '';
       const userQuery = query(
         collection(db, 'funcionarios'),
-        where('email', '==', firebaseUser.email)
+        where('email', '==', normalizedEmail)
       );
       const userSnap = await getDocs(userQuery);
       console.log(`[Auth] Step 4: funcionarios email query empty=${userSnap.empty}, count=${userSnap.size}`);
@@ -163,9 +165,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 6. Check for pending invitations
     try {
+      const normalizedEmail = firebaseUser.email?.trim().toLowerCase() || '';
       const inviteQuery = query(
         collection(db, 'invitations'),
-        where('email', '==', firebaseUser.email),
+        where('email', '==', normalizedEmail),
         where('status', '==', 'pending')
       );
       const inviteSnap = await getDocs(inviteQuery);
@@ -281,10 +284,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerWorker = async (email: string, password: string, name: string) => {
     setAccessError(null);
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const normalizedEmail = email.trim().toLowerCase();
+    const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
     await setDoc(doc(db, 'trabalhadores', userCredential.user.uid), {
       uid: userCredential.user.uid,
-      email: email,
+      email: normalizedEmail,
       nome: name,
       tipo: 'independente',
       data_criacao: new Date().toISOString().split('T')[0],
@@ -303,12 +307,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (autoCreateWorker) {
       const existingDoc = await getDoc(doc(db, 'trabalhadores', cred.user.uid));
       if (!existingDoc.exists()) {
-        const adminQuery = await getDocs(query(collection(db, 'empresa_admins'), where('email', '==', cred.user.email)));
-        const funcQuery = await getDocs(query(collection(db, 'funcionarios'), where('email', '==', cred.user.email)));
+        const normalizedEmail = cred.user.email?.trim().toLowerCase() || '';
+        const adminQuery = await getDocs(query(collection(db, 'empresa_admins'), where('email', '==', normalizedEmail)));
+        const funcQuery = await getDocs(query(collection(db, 'funcionarios'), where('email', '==', normalizedEmail)));
         if (adminQuery.empty && funcQuery.empty) {
           const trabalhadorData = {
             uid: cred.user.uid,
-            email: cred.user.email,
+            email: normalizedEmail,
             nome: cred.user.displayName || cred.user.email?.split('@')[0] || 'Trabalhador',
             tipo: 'independente',
             data_criacao: new Date().toISOString().split('T')[0],

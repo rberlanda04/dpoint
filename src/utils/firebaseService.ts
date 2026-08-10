@@ -178,10 +178,8 @@ export class FirebaseService {
         cargo: funcionario.cargo,
         status: funcionario.status,
         empresa_id: funcionario.empresa_id || '',
+        email: funcionario.email ? funcionario.email.trim().toLowerCase() : '',
       };
-      if (funcionario.email) {
-        data.email = funcionario.email;
-      }
       await setDoc(docRef, data);
     } catch (error) {
       console.error('Erro ao cadastrar funcionário no Firestore:', error);

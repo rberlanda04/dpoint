@@ -18,8 +18,11 @@ export default function FuncionarioDashboard() {
     async function loadData() {
       if (!user?.email) return;
       
+      const normalizedEmail = user.email.trim().toLowerCase();
       const db = await dataService.loadAllData();
-      const loggedFunc = db.funcionarios.find((f: any) => f.email === user.email);
+      const loggedFunc = db.funcionarios.find((f: any) => 
+        f.email && f.email.trim().toLowerCase() === normalizedEmail
+      );
       
       if (loggedFunc) {
         setFuncionario(loggedFunc);

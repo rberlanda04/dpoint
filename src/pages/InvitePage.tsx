@@ -53,11 +53,12 @@ export default function InvitePage() {
 
   const acceptInviteWithUid = async (firebaseUid: string) => {
     if (!invitation) return;
+    const inviteEmail = invitation.email.trim().toLowerCase();
 
     if (invitation.role === 'empresa_admin') {
       const adminData: EmpresaAdmin = {
         uid: firebaseUid,
-        email: invitation.email,
+        email: inviteEmail,
         nome: invitation.nome || '',
         empresa_id: invitation.empresa_id,
         empresa_nome: invitation.empresa_nome,
@@ -69,12 +70,13 @@ export default function InvitePage() {
     } else {
       const funcQuery = query(
         collection(db, 'funcionarios'),
-        where('email', '==', invitation.email)
+        where('email', '==', inviteEmail)
       );
       const funcSnap = await getDocs(funcQuery);
       if (!funcSnap.empty) {
         await updateDoc(funcSnap.docs[0].ref, {
           status: 'Ativo',
+          email: inviteEmail,
         });
       } else if (invitation.nome && invitation.empresa_id) {
         const nameQuery = query(
@@ -86,7 +88,7 @@ export default function InvitePage() {
         if (!nameSnap.empty) {
           await updateDoc(nameSnap.docs[0].ref, {
             status: 'Ativo',
-            email: invitation.email,
+            email: inviteEmail,
           });
         }
       }

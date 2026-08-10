@@ -87,7 +87,7 @@ export default function FuncionariosPage() {
         const invitation: Invitation = {
           id: token,
           token,
-          email: newFunc.email.trim(),
+        email: newFunc.email.trim().toLowerCase(),
           nome: newFunc.nome.trim(),
           empresa_id: empresaAdmin?.empresa_id || '',
           empresa_nome: empresaAdmin?.empresa_nome,
