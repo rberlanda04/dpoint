@@ -94,8 +94,12 @@ export default function DashboardOverview() {
     );
   }
 
-  const funcionariosAtivos = data.funcionarios.filter((f: any) => f.status === 'Ativo').length;
-  const registrosHoje = data.registros.filter((r: any) => isToday(r.data_hora));
+  const registros = data.registros || [];
+  const locais = data.locais || [];
+  const funcionarios = data.funcionarios || [];
+
+  const funcionariosAtivos = funcionarios.filter((f: any) => f.status === 'Ativo').length;
+  const registrosHoje = registros.filter((r: any) => isToday(r.data_hora));
   const trabalhadoresAtivosHoje = new Set(registrosHoje.map((r: any) => r.id_funcionario)).size;
   const checkinsHoje = registrosHoje.filter((r: any) => r.tipo === 'Check-in').length;
   const checkoutsHoje = registrosHoje.filter((r: any) => r.tipo === 'Check-out').length;
@@ -109,9 +113,9 @@ export default function DashboardOverview() {
     return { hora: `${String(hour).padStart(2, '0')}h`, registros: count };
   });
 
-  const locationStats = data.locais.map((loc: any) => ({
+  const locationStats = locais.map((loc: any) => ({
     name: loc.nome_empresa.length > 15 ? loc.nome_empresa.substring(0, 15) + '...' : loc.nome_empresa,
-    registros: data.registros.filter((r: any) => r.id_local === loc.id_local && isToday(r.data_hora)).length,
+    registros: registros.filter((r: any) => r.id_local === loc.id_local && isToday(r.data_hora)).length,
   })).filter((l: any) => l.registros > 0).sort((a: any, b: any) => b.registros - a.registros).slice(0, 5);
 
   const tipoData = [
@@ -168,7 +172,7 @@ export default function DashboardOverview() {
     return count;
   })();
 
-  const ultimosRegistros = data.registros.slice(0, 8);
+  const ultimosRegistros = registros.slice(0, 8);
 
   return (
     <div className="p-6 lg:p-8 font-sans">
@@ -203,7 +207,7 @@ export default function DashboardOverview() {
       />
       <MetricCard
         label={t('dash.registeredSites')}
-        value={data.locais.length}
+        value={locais.length}
         icon={MapPin}
         color="emerald"
       />
