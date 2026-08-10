@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, QrCode, ExternalLink, MapPin, Pencil, Trash2, Loader2, Link, Copy, CheckCircle } from 'lucide-react';
+import { Plus, QrCode, ExternalLink, MapPin, Pencil, Trash2, Loader2, Link, Copy, CheckCircle, Navigation } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { Card, Badge, SearchInput, Button, EmptyState } from '../components/ui';
+import { Card, Badge, SearchInput, Button, EmptyState, Dialog } from '../components/ui';
+import { useToast } from '../components/ui/Toast';
 import PageHeader from '../components/layouts/PageHeader';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { dataService } from '../utils/gasClient';
@@ -39,14 +40,21 @@ export default function ObrasPage() {
   const [locais, setLocais] = useState<LocalServico[]>([]);
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(true);
   const [qrLocal, setQrLocal] = useState<LocalServico | null>(null);
   const [editing, setEditing] = useState<LocalServico | null>(null);
   const [saving, setSaving] = useState(false);
+  const generateId = () => `LOC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
   const [newLocal, setNewLocal] = useState({
-    id: '', empresa: '', cidade: '', lat: '', lng: '', raio: '100', raioAuto: '100', address: '', raioAutoCalculated: false
+    id: generateId(), empresa: '', cidade: '', lat: '', lng: '', raio: '100', raioAuto: '100', address: '', numero: '', raioAutoCalculated: false
   });
   const [copiedAutoLink, setCopiedAutoLink] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LocalServico | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [capturingGps, setCapturingGps] = useState(false);
+  const toast = useToast();
 
   const empresaId = isSuperAdmin ? undefined : empresaAdmin?.empresa_id || undefined;
 
@@ -64,28 +72,83 @@ export default function ObrasPage() {
   );
 
   const resetForm = () => {
-    setNewLocal({ id: '', empresa: '', cidade: '', lat: '', lng: '', raio: '100', raioAuto: '100', address: '', raioAutoCalculated: false });
+    setNewLocal({ id: generateId(), empresa: '', cidade: '', lat: '', lng: '', raio: '100', raioAuto: '100', address: '', numero: '', raioAutoCalculated: false });
   };
 
   const handleAddressSelect = (data: { lat: number; lng: number; address: string; city: string; boundingbox?: string[] }) => {
     const autoRadius = calculateRadiusFromBbox(data.boundingbox);
+    const shortName = data.address.split(',')[0].trim();
     setNewLocal(prev => ({
       ...prev,
       lat: data.lat.toString(),
       lng: data.lng.toString(),
       address: data.address,
       cidade: data.city || prev.cidade,
+      empresa: prev.empresa || shortName,
       raio: autoRadius.toString(),
       raioAuto: autoRadius.toString(),
       raioAutoCalculated: true,
     }));
   };
 
+  const handleCaptureGps = () => {
+    if (!navigator.geolocation) {
+      toast.warning('Geolocalização não suportada pelo navegador.');
+      return;
+    }
+    setCapturingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setNewLocal(prev => ({
+          ...prev,
+          lat: pos.coords.latitude.toString(),
+          lng: pos.coords.longitude.toString(),
+          raioAutoCalculated: false,
+        }));
+        toast.success('Localização capturada com sucesso!');
+        setCapturingGps(false);
+      },
+      (err) => {
+        console.error('Erro ao capturar GPS:', err);
+        toast.error('Não foi possível obter a localização. Verifique as permissões.');
+        setCapturingGps(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+  };
+
+  const [searchingNumber, setSearchingNumber] = useState(false);
+  const handleNumberSearch = async (num: string) => {
+    if (!num.trim() || !newLocal.address) return;
+    setSearchingNumber(true);
+    try {
+      // Pega só o nome da rua (primeira parte antes da vírgula)
+      const street = newLocal.address.split(',')[0].trim();
+      const query = `${street}, ${num}, ${newLocal.cidade}`;
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
+      const data = await resp.json();
+      
+      if (data && data.length > 0) {
+        setNewLocal(prev => ({
+          ...prev,
+          lat: data[0].lat.toString(),
+          lng: data[0].lon.toString()
+        }));
+        toast.success(`Coordenadas refinadas para o número ${num}`);
+      } else {
+        toast.info(`Não foi possível achar a posição exata do número ${num}, mantendo centro da rua.`);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setSearchingNumber(false);
+  };
+
   const validateCoords = (): { lat: number; lng: number } | null => {
     const lat = parseFloat(newLocal.lat);
     const lng = parseFloat(newLocal.lng);
-    if (isNaN(lat) || lat < -90 || lat > 90) { alert(t('obras.invalidLat')); return null; }
-    if (isNaN(lng) || lng < -180 || lng > 180) { alert(t('obras.invalidLng')); return null; }
+    if (isNaN(lat) || lat < -90 || lat > 90) { toast.warning(t('obras.invalidLat')); return null; }
+    if (isNaN(lng) || lng < -180 || lng > 180) { toast.warning(t('obras.invalidLng')); return null; }
     return { lat, lng };
   };
 
@@ -115,8 +178,7 @@ export default function ObrasPage() {
       // Mostra modal com QR code e link de auto-cadastro
       setQrLocal(local);
      } catch (err) {
-      console.error('Erro ao salvar obra:', err);
-      alert(t('obras.saveError'));
+      toast.error(t('obras.saveError'));
     }
     setSaving(false);
   };
@@ -143,21 +205,23 @@ export default function ObrasPage() {
       setLocais(prev => prev.map(l => l.id_local === editing.id_local ? updated : l));
       setEditing(null);
     } catch (err) {
-      console.error('Erro ao editar obra:', err);
-      alert(t('obras.saveError'));
+      toast.error(t('obras.saveError'));
     }
     setSaving(false);
   };
 
-  const handleDelete = async (local: LocalServico) => {
-    if (!confirm(t('obras.deleteConfirm', { name: local.nome_empresa }))) return;
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await dataService.excluirLocal(local.id_local);
-      setLocais(prev => prev.filter(l => l.id_local !== local.id_local));
+      await dataService.excluirLocal(deleteTarget.id_local, empresaId);
+      setLocais(prev => prev.filter(l => l.id_local !== deleteTarget.id_local));
+      toast.success(`${deleteTarget.nome_empresa} removido com sucesso.`);
     } catch (err) {
-      console.error('Erro ao excluir obra:', err);
-      alert(t('obras.deleteError'));
+      toast.error(t('obras.deleteError'));
     }
+    setDeleting(false);
+    setDeleteTarget(null);
   };
 
   const startEdit = (local: LocalServico) => {
@@ -173,6 +237,7 @@ export default function ObrasPage() {
       raioAutoCalculated: false,
     });
     setEditing(local);
+    setShowAdvanced(false);
     setShowAdd(false);
   };
 
@@ -205,85 +270,158 @@ export default function ObrasPage() {
       <SearchInput value={search} onChange={setSearch} placeholder={t('obras.searchPlaceholder')} className="mb-6" />
 
       {showAdd || editing ? (
-        <Card className="mb-6 border-indigo-200 bg-indigo-50/30">
-          <form onSubmit={editing ? handleEdit : handleAdd} className="space-y-4">
+        <Card className="mb-6 border-emerald-200 bg-emerald-50/30 shadow-md">
+          <form onSubmit={editing ? handleEdit : handleAdd} className="space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-800">{editing ? t('obras.edit') : t('obras.new')}</h3>
               {editing && <span className="text-xs text-slate-400 font-mono">{editing.id_local}</span>}
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2 grid grid-cols-4 gap-3 items-start">
+                <div className="col-span-3 space-y-1.5 relative">
+                  <label className="text-xs font-semibold text-slate-700">1. Buscar Rua / Avenida</label>
+                  <AddressAutocomplete
+                    value={newLocal.address}
+                    onChange={(address) => setNewLocal({ ...newLocal, address })}
+                    onSelect={handleAddressSelect}
+                    placeholder="Ex: Avenida Paulista..."
+                  />
+                </div>
+                <div className="col-span-1 space-y-1.5 relative">
+                  <label className="text-xs font-semibold text-slate-700">Número</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 1578"
+                    value={newLocal.numero}
+                    onChange={(e) => setNewLocal({ ...newLocal, numero: e.target.value })}
+                    onBlur={(e) => handleNumberSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                  {searchingNumber && (
+                    <Loader2 className="absolute right-3 top-9 w-4 h-4 text-emerald-500 animate-spin" />
+                  )}
+                </div>
+              </div>
+
               {!editing && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700">ID da Obra (Único)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: OBRA-001"
+                    value={newLocal.id}
+                    onChange={(e) => setNewLocal({ ...newLocal, id: e.target.value })}
+                    required
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                </div>
+              )}
+              
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700">Nome da Obra / Empresa</label>
                 <input
                   type="text"
-                  placeholder={t('obras.idPlaceholder')}
-                  value={newLocal.id}
-                  onChange={(e) => setNewLocal({ ...newLocal, id: e.target.value })}
+                  placeholder={t('obras.namePlaceholder')}
+                  value={newLocal.empresa}
+                  onChange={(e) => setNewLocal({ ...newLocal, empresa: e.target.value })}
                   required
-                  className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 />
-              )}
-              <input
-                type="text"
-                placeholder={t('obras.namePlaceholder')}
-                value={newLocal.empresa}
-                onChange={(e) => setNewLocal({ ...newLocal, empresa: e.target.value })}
-                required
-                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
+              </div>
 
-              <AddressAutocomplete
-                value={newLocal.address}
-                onChange={(address) => setNewLocal({ ...newLocal, address })}
-                onSelect={handleAddressSelect}
-                placeholder={t('obras.addressPlaceholder')}
-                className="sm:col-span-2"
-              />
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700">Cidade</label>
+                <input
+                  type="text"
+                  placeholder={t('obras.cityPlaceholder')}
+                  value={newLocal.cidade}
+                  onChange={(e) => setNewLocal({ ...newLocal, cidade: e.target.value })}
+                  required
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+              </div>
 
-              <input
-                type="text"
-                placeholder={t('obras.cityPlaceholder')}
-                value={newLocal.cidade}
-                onChange={(e) => setNewLocal({ ...newLocal, cidade: e.target.value })}
-                required
-                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-              <input
-                type="number"
-                placeholder={t('obras.radiusPlaceholder')}
-                value={newLocal.raio}
-                onChange={(e) => setNewLocal({ ...newLocal, raio: e.target.value })}
-                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-              <input
-                type="number"
-                placeholder={t('obras.radiusAutoPlaceholder')}
-                value={newLocal.raioAuto}
-                onChange={(e) => setNewLocal({ ...newLocal, raioAuto: e.target.value })}
-                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-              <input
-                type="number"
-                step="any"
-                placeholder={t('obras.latPlaceholder')}
-                value={newLocal.lat}
-                onChange={(e) => setNewLocal({ ...newLocal, lat: e.target.value })}
-                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-              <input
-                type="number"
-                step="any"
-                placeholder={t('obras.lngPlaceholder')}
-                value={newLocal.lng}
-                onChange={(e) => setNewLocal({ ...newLocal, lng: e.target.value })}
-                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
+              <div className="sm:col-span-2 mt-2 border-t border-slate-200/60 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer border-0 bg-transparent flex items-center gap-1 mb-3"
+                >
+                  {showAdvanced ? 'Ocultar configurações avançadas' : 'Mostrar configurações avançadas (Coordenadas e Raio)'}
+                </button>
+                
+                {showAdvanced && (
+                  <div className="grid sm:grid-cols-2 gap-4 bg-white/50 p-4 rounded-xl border border-slate-100">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700">Raio de Check-in (Manual)</label>
+                      <input
+                        type="number"
+                        placeholder={t('obras.radiusPlaceholder')}
+                        value={newLocal.raio}
+                        onChange={(e) => setNewLocal({ ...newLocal, raio: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700">Raio Automático (Calculado)</label>
+                      <input
+                        type="number"
+                        placeholder={t('obras.radiusAutoPlaceholder')}
+                        value={newLocal.raioAuto}
+                        onChange={(e) => setNewLocal({ ...newLocal, raioAuto: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700">Latitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder={t('obras.latPlaceholder')}
+                        value={newLocal.lat}
+                        onChange={(e) => setNewLocal({ ...newLocal, lat: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700">Longitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder={t('obras.lngPlaceholder')}
+                        value={newLocal.lng}
+                        onChange={(e) => setNewLocal({ ...newLocal, lng: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <button
+                        type="button"
+                        onClick={handleCaptureGps}
+                        disabled={capturingGps}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-100 rounded-xl hover:bg-emerald-200 disabled:opacity-50 cursor-pointer border-0"
+                      >
+                        {capturingGps ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Navigation className="w-4 h-4" />
+                        )}
+                        {capturingGps ? 'Obtendo localização...' : 'Usar minha localização atual'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {newLocal.lat && newLocal.lng && (
-                <div className="sm:col-span-2 flex items-center justify-between text-xs text-slate-500 font-mono bg-slate-50 rounded-lg px-3 py-2">
-                  <span>Lat: {parseFloat(newLocal.lat).toFixed(6)} | Lng: {parseFloat(newLocal.lng).toFixed(6)}</span>
+                <div className="sm:col-span-2 flex items-center justify-between text-xs text-emerald-700 font-mono bg-emerald-100/50 rounded-lg px-4 py-2.5 border border-emerald-200">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    Lat: {parseFloat(newLocal.lat).toFixed(6)} | Lng: {parseFloat(newLocal.lng).toFixed(6)}
+                  </span>
                   {newLocal.raioAutoCalculated && (
-                    <span className="text-[10px] text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full font-medium">
+                    <span className="text-[10px] text-emerald-700 bg-emerald-200/50 px-2.5 py-1 rounded-full font-bold">
                       {t('obras.radiusAutoCalculated')}
                     </span>
                   )}
@@ -295,14 +433,14 @@ export default function ObrasPage() {
             {newLocal.lat && newLocal.lng && newLocal.id && (
               <div className="pt-3 border-t border-slate-200">
                 <div className="flex items-center gap-2 mb-2">
-                  <QrCode className="w-4 h-4 text-indigo-500" />
+                  <QrCode className="w-4 h-4 text-emerald-500" />
                   <span className="text-xs font-semibold text-slate-700">{t('obras.qrPreview')}</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="bg-white border border-slate-200 rounded-xl p-2 shrink-0">
-                    <QRCodeCanvas value={`${window.location.origin}/checkin?local=${newLocal.id.toUpperCase()}&lat=${newLocal.lat}&lng=${newLocal.lng}`} size={100} level="M" includeMargin={false} />
+                    <QRCodeCanvas value={`${window.location.origin}/checkin?local=${newLocal.id.toUpperCase()}&lat=${newLocal.lat}&lng=${newLocal.lng}&raio=${newLocal.raio}`} size={100} level="M" includeMargin={false} />
                   </div>
-                  <p className="text-[11px] text-slate-400 font-mono break-all">{`${window.location.origin}/checkin?local=${newLocal.id.toUpperCase()}&lat=${newLocal.lat}&lng=${newLocal.lng}`}</p>
+                  <p className="text-[11px] text-slate-400 font-mono break-all">{`${window.location.origin}/checkin?local=${newLocal.id.toUpperCase()}&lat=${newLocal.lat}&lng=${newLocal.lng}&raio=${newLocal.raio}`}</p>
                 </div>
               </div>
             )}
@@ -341,13 +479,13 @@ export default function ObrasPage() {
                 <div className="flex items-center gap-1 flex-wrap">
                   <button
                     onClick={() => setQrLocal(local)}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors cursor-pointer border-0 bg-transparent"
+                    className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 px-3 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer border-0 bg-transparent"
                   >
                     <QrCode className="w-3.5 h-3.5" />
                     {t('obras.qrCode')}
                   </button>
                   <a
-                    href={`/checkin?local=${local.id_local}`}
+                    href={`/checkin?local=${local.id_local}&lat=${local.latitude}&lng=${local.longitude}&raio=${local.raio_metros}`}
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors no-underline"
@@ -363,7 +501,7 @@ export default function ObrasPage() {
                     {t('common.edit')}
                   </button>
                   <button
-                    onClick={() => handleDelete(local)}
+                    onClick={() => setDeleteTarget(local)}
                     className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer border-0 bg-transparent"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -388,13 +526,13 @@ export default function ObrasPage() {
               <p className="text-[10px] text-slate-400 font-mono break-all">{qrUrl}</p>
 
               {/* Link de auto-cadastro */}
-              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-indigo-700">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
                   <Link className="w-4 h-4" />
                   <span>{t('obras.autoCadastroTitle')}</span>
                 </div>
-                <p className="text-xs text-indigo-600">{t('obras.autoCadastroDesc')}</p>
-                <div className="text-[10px] font-mono text-indigo-700 bg-white rounded-lg p-2 break-all">
+                <p className="text-xs text-emerald-600">{t('obras.autoCadastroDesc')}</p>
+                <div className="text-[10px] font-mono text-emerald-700 bg-white rounded-lg p-2 break-all">
                   {autoCadastroUrl}
                 </div>
                 <div className="flex gap-2">
@@ -422,7 +560,7 @@ export default function ObrasPage() {
                   </Button>
                   <Button size="sm" className="flex-1" onClick={() => {
                     navigator.clipboard.writeText(qrUrl);
-                    alert(t('obras.linkCopied'));
+                    toast.success(t('obras.linkCopied'));
                   }}>
                     {t('common.copyLink')}
                   </Button>
@@ -436,6 +574,19 @@ export default function ObrasPage() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteConfirm}
+        title={t('obras.deleteConfirmTitle') || 'Excluir local de serviço?'}
+        description={deleteTarget ? (t('obras.deleteConfirm', { name: deleteTarget.nome_empresa }) || `Tem certeza que deseja excluir ${deleteTarget.nome_empresa}? Esta ação não pode ser desfeita.`) : ''}
+        confirmLabel={t('common.delete') || 'Excluir'}
+        cancelLabel={t('common.cancel')}
+        variant="danger"
+        loading={deleting}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { MapPin, QrCode, Camera, CheckCircle2, AlertTriangle, Loader2, ArrowLeft, ScanLine } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { MapPin, QrCode, Camera, CheckCircle2, AlertTriangle, Loader2, ArrowLeft, ScanLine, LogOut } from 'lucide-react';
 import { Button, Card, Badge, EmptyState } from '../components/ui';
 import QRCodeScanner from '../components/QRCodeScanner';
 import LanguageSwitcher from '../components/LanguageSwitcher';
@@ -8,7 +8,9 @@ import Logo from '../components/Logo';
 import { dataService } from '../utils/gasClient';
 import { uploadPhotoEvidence } from '../utils/storage';
 import { generateId } from '../utils/crypto';
+import { isWithinRadius } from '../utils/geo';
 import { useI18n } from '../i18n';
+import { useAuth } from '../hooks/useAuth';
 import { Funcionario, LocalServico, RegistroPonto, SystemConfig } from '../types';
 
 type Step = 'scan' | 'location' | 'photo' | 'confirm' | 'success';
@@ -49,7 +51,9 @@ function compressImage(file: File, maxWidth = 800, quality = 0.6): Promise<strin
 
 export default function CheckInPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { t } = useI18n();
+  const { user, userRole, logout } = useAuth();
   const [step, setStep] = useState<Step>('scan');
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [locais, setLocais] = useState<LocalServico[]>([]);
@@ -84,9 +88,31 @@ export default function CheckInPage() {
       setConfig(cfg);
       setLoading(false);
 
+      // Auto-detect logged-in employee if user is authenticated
+      if (user?.email) {
+        const loggedFunc = db.funcionarios.find((f: any) => f.email === user.email);
+        if (loggedFunc) {
+          setSelectedFunc(loggedFunc);
+          
+          // Helper is defined later, so we find the last record manually here
+          const todayStr = new Date().toISOString().split('T')[0];
+          const funcRecords = db.registros
+            .filter((r: any) => r.data_hora && r.id_funcionario === loggedFunc.id_funcionario && r.data_hora.startsWith(todayStr))
+            .sort((a: any, b: any) => a.data_hora.localeCompare(b.data_hora));
+            
+          if (funcRecords.length > 0) {
+            const last = funcRecords[funcRecords.length - 1];
+            setTipo(last.tipo === 'Check-in' ? 'Check-out' : 'Check-in');
+          } else {
+            setTipo('Check-in');
+          }
+        }
+      }
+
       const localParam = searchParams.get('local');
       const latParam = searchParams.get('lat');
       const lngParam = searchParams.get('lng');
+      const raioParam = searchParams.get('raio');
       if (localParam) {
         const found = db.locais.find((l: LocalServico) => l.id_local === localParam.toUpperCase());
         if (found) {
@@ -99,7 +125,7 @@ export default function CheckInPage() {
             cidade: '',
             latitude: parseFloat(latParam),
             longitude: parseFloat(lngParam),
-            raio_metros: 100,
+            raio_metros: raioParam ? parseInt(raioParam) : 100,
           };
           setSelectedLocal(tempLocal);
           setStep('location');
@@ -108,7 +134,7 @@ export default function CheckInPage() {
     });
 
     handleGetLocation();
-  }, []);
+  }, [user]);
 
   const handleGetLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -236,16 +262,32 @@ export default function CheckInPage() {
     return '';
   };
 
+  const getSuggestedTipo = (funcId: string): 'Check-in' | 'Check-out' => {
+    const today = new Date().toLocaleDateString('pt-BR');
+    const todayRecords = registros.filter(r => {
+      const recordDate = new Date(r.data_hora).toLocaleDateString('pt-BR');
+      return r.id_funcionario === funcId && recordDate === today;
+    });
+
+    const lastRecord = todayRecords.sort((a, b) =>
+      new Date(b.data_hora).getTime() - new Date(a.data_hora).getTime()
+    )[0];
+
+    // Se último registro foi Check-in, sugerir Check-out e vice-versa
+    if (!lastRecord) return 'Check-in';
+    return lastRecord.tipo === 'Check-in' ? 'Check-out' : 'Check-in';
+  };
+
   const isWithinGeofence = (): boolean => {
     if (!geoPosition || !selectedLocal) return false;
-    const R = 6371e3;
-    const φ1 = (geoPosition.lat * Math.PI) / 180;
-    const φ2 = (selectedLocal.latitude * Math.PI) / 180;
-    const Δφ = ((selectedLocal.latitude - geoPosition.lat) * Math.PI) / 180;
-    const Δλ = ((selectedLocal.longitude - geoPosition.lng) * Math.PI) / 180;
-    const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-    const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return distance <= selectedLocal.raio_metros;
+    return isWithinRadius(
+      geoPosition.lat,
+      geoPosition.lng,
+      selectedLocal.latitude,
+      selectedLocal.longitude,
+      selectedLocal.raio_metros,
+      geoPosition.accuracy
+    );
   };
 
   const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -288,7 +330,7 @@ export default function CheckInPage() {
         nome_funcionario: selectedFunc.nome,
         nome_local: selectedLocal.nome_empresa,
         dentro_geofence: isWithinGeofence(),
-        tipo_verificacao: selectedLocal.latitude ? 'GPS' : 'Nenhum',
+        tipo_verificacao: geoPosition ? 'GPS' : 'Nenhum',
         foto_url: fotoFinal,
       };
 
@@ -361,6 +403,16 @@ export default function CheckInPage() {
             </button>
           )}
           <LanguageSwitcher />
+          {user && (
+            <button
+              onClick={async () => { await logout(); navigate('/login'); }}
+              className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-red-600 px-2 py-1.5 rounded-lg hover:bg-red-50 transition-all cursor-pointer border-0 bg-transparent"
+              title={t('common.logout')}
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{t('common.logout')}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -503,36 +555,52 @@ export default function CheckInPage() {
 
             {/* Employee Select */}
             <h3 className="text-sm font-semibold text-slate-700 mt-4">{t('checkin.whoRegistering')}</h3>
-            <input
-              type="text"
-              placeholder={t('checkin.searchEmployee')}
-              value={searchFunc}
-              onChange={(e) => setSearchFunc(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-            />
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {filteredFuncs.map(func => (
-                <button
-                  key={func.id_funcionario}
-                  onClick={() => {
-                    setSelectedFunc(func);
-                    const warning = checkPairing(func.id_funcionario, tipo);
-                    setPairWarning(warning);
-                  }}
-                  className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${
-                    selectedFunc?.id_funcionario === func.id_funcionario
-                      ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500/20'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <p className="text-sm font-medium text-slate-800">{func.nome}</p>
-                  <p className="text-xs text-slate-400">{func.cargo} · {t('checkin.mat')} {func.id_funcionario}</p>
-                </button>
-              ))}
-              {filteredFuncs.length === 0 && (
-                <EmptyState icon={<MapPin className="w-6 h-6" />} title={t('checkin.noEmployeeFound')} description={t('checkin.noEmployeeDesc')} />
-              )}
-            </div>
+            
+            {userRole === 'funcionario' && selectedFunc ? (
+              <div className="mt-2 p-3 rounded-xl border border-indigo-500 bg-indigo-50 flex items-center justify-between shadow-sm">
+                <div>
+                  <p className="text-sm font-bold text-indigo-900">{selectedFunc.nome}</p>
+                  <p className="text-xs text-indigo-600/80">{selectedFunc.cargo} · {t('checkin.mat')} {selectedFunc.id_funcionario}</p>
+                </div>
+                <Badge variant="success">Seu Perfil</Badge>
+              </div>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  placeholder={t('checkin.searchEmployee')}
+                  value={searchFunc}
+                  onChange={(e) => setSearchFunc(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 mt-2"
+                />
+                <div className="space-y-2 max-h-60 overflow-y-auto mt-2">
+                  {filteredFuncs.map(func => (
+                    <button
+                      key={func.id_funcionario}
+                      onClick={() => {
+                        setSelectedFunc(func);
+                        // Auto-suggest Check-in/Check-out based on last record
+                        const suggested = getSuggestedTipo(func.id_funcionario);
+                        setTipo(suggested);
+                        const warning = checkPairing(func.id_funcionario, suggested);
+                        setPairWarning(warning);
+                      }}
+                      className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${
+                        selectedFunc?.id_funcionario === func.id_funcionario
+                          ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500/20'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <p className="text-sm font-medium text-slate-800">{func.nome}</p>
+                      <p className="text-xs text-slate-400">{func.cargo} · {t('checkin.mat')} {func.id_funcionario}</p>
+                    </button>
+                  ))}
+                  {filteredFuncs.length === 0 && (
+                    <EmptyState icon={<MapPin className="w-6 h-6" />} title={t('checkin.noEmployeeFound')} description={t('checkin.noEmployeeDesc')} />
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Type Toggle */}
             <div className="flex bg-slate-100 rounded-xl p-1 mt-4">

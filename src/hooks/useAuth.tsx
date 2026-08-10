@@ -14,7 +14,8 @@ import { auth, db } from '../utils/firebase';
 import { useI18n } from '../i18n';
 import { UserRole, EmpresaAdmin } from '../types';
 
-const SUPER_ADMIN_EMAIL = 'r.berlanda04@gmail.com';
+// Super admin is now determined by the /super_admins/{uid} collection in Firestore
+// instead of a hardcoded email. Create a document with { ativo: true } for each super admin.
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -59,8 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadUserRole = async (firebaseUser: FirebaseUser): Promise<UserRole> => {
-    if (firebaseUser.email === SUPER_ADMIN_EMAIL) {
-      return 'super_admin';
+    // Check super_admins collection by UID
+    try {
+      const superAdminDoc = await getDoc(doc(db, 'super_admins', firebaseUser.uid));
+      if (superAdminDoc.exists() && superAdminDoc.data().ativo === true) {
+        return 'super_admin';
+      }
+    } catch {
+      // Permission denied means user is not a super admin — continue
     }
 
     try {
@@ -74,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setAccessError(t('auth.accountDisabled'));
           await signOut(auth);
-          return 'funcionario';
+          return 'none';
         }
       }
 
@@ -92,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setAccessError(t('auth.accountDisabled'));
           await signOut(auth);
-          return 'funcionario';
+          return 'none';
         }
       }
 
@@ -103,13 +110,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
       const userSnap = await getDocs(userQuery);
       if (!userSnap.empty) {
+        // Check if user also exists as B2C worker — if so, prioritize worker role
+        const trabalhadorDoc = await getDoc(doc(db, 'trabalhadores', firebaseUser.uid));
+        if (trabalhadorDoc.exists()) {
+          return 'trabalhador_avulso';
+        }
         const funcData = userSnap.docs[0].data();
         if (funcData.status === 'Ativo') {
           return 'funcionario';
         } else {
           setAccessError(t('auth.registrationDisabled'));
           await signOut(auth);
-          return 'funcionario';
+          return 'none';
         }
       }
 
@@ -173,21 +185,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('Consulta de convites ignorada (permissão):', inviteError);
       }
 
-      // Se não encontrou em nenhuma coleção, cria como trabalhador avulso (B2C)
-      // Isso permite login com Google para novos trabalhadores
-      const trabalhadorData = {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        nome: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Trabalhador',
-        tipo: 'independente',
-        data_criacao: new Date().toISOString().split('T')[0],
-        status: 'Ativo',
-      };
-      await setDoc(doc(db, 'trabalhadores', firebaseUser.uid), trabalhadorData);
-      return 'trabalhador_avulso';
+      // Se não encontrou em nenhuma coleção, NÃO cria automaticamente
+      // Usuário deve se cadastrar primeiro via /register ou ser convidado
+      setAccessError(t('auth.emailNotRegistered'));
+      await signOut(auth);
+      return 'none';
     } catch (error) {
       console.error('Erro ao carregar role do usuário:', error);
-      return 'funcionario';
+      return 'none';
     }
   };
 
@@ -218,11 +223,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async (autoCreateWorker = false) => {
     setAccessError(null);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    await signInWithPopup(auth, provider);
+    const cred = await signInWithPopup(auth, provider);
+    
+    // Se não encontrou em nenhuma coleção e autoCreateWorker está habilitado,
+    // cria como trabalhador avulso (B2C)
+    if (autoCreateWorker) {
+      const existingDoc = await getDoc(doc(db, 'trabalhadores', cred.user.uid));
+      if (!existingDoc.exists()) {
+        const adminQuery = await getDocs(query(collection(db, 'empresa_admins'), where('email', '==', cred.user.email)));
+        const funcQuery = await getDocs(query(collection(db, 'funcionarios'), where('email', '==', cred.user.email)));
+        if (adminQuery.empty && funcQuery.empty) {
+          const trabalhadorData = {
+            uid: cred.user.uid,
+            email: cred.user.email,
+            nome: cred.user.displayName || cred.user.email?.split('@')[0] || 'Trabalhador',
+            tipo: 'independente',
+            data_criacao: new Date().toISOString().split('T')[0],
+            status: 'Ativo',
+          };
+          await setDoc(doc(db, 'trabalhadores', cred.user.uid), trabalhadorData);
+        }
+      }
+    }
   };
 
   const loginWithApple = async () => {

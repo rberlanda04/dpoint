@@ -98,29 +98,75 @@ export class FirebaseService {
   }
 
   public async registrarPonto(registro: RegistroPonto): Promise<void> {
-    try {
-      const docRef = doc(db, 'registros', registro.id_registro);
+    const saveToFirestore = async (rec: RegistroPonto) => {
+      const docRef = doc(db, 'registros', rec.id_registro);
       await setDoc(docRef, {
-        id_funcionario: registro.id_funcionario,
-        nome_funcionario: registro.nome_funcionario || '',
-        id_local: registro.id_local,
-        nome_local: registro.nome_local || '',
-        empresa_id: registro.empresa_id || '',
-        tipo: registro.tipo,
-        data_hora: registro.data_hora,
-        latitude_registro: registro.latitude_registro,
-        longitude_registro: registro.longitude_registro,
-        observacao: registro.observacao || '',
-        precisao_gps: registro.precisao_gps,
-        fotos: registro.fotos || [],
-        dentro_geofence: registro.dentro_geofence ?? false,
-        tipo_verificacao: registro.tipo_verificacao || '',
-        foto_url: registro.foto_url || '',
-        auto: registro.auto || false,
+        id_funcionario: rec.id_funcionario,
+        nome_funcionario: rec.nome_funcionario || '',
+        id_local: rec.id_local,
+        nome_local: rec.nome_local || '',
+        empresa_id: rec.empresa_id || '',
+        tipo: rec.tipo,
+        data_hora: rec.data_hora,
+        latitude_registro: rec.latitude_registro,
+        longitude_registro: rec.longitude_registro,
+        observacao: rec.observacao || '',
+        precisao_gps: rec.precisao_gps,
+        fotos: rec.fotos || [],
+        dentro_geofence: rec.dentro_geofence ?? false,
+        tipo_verificacao: rec.tipo_verificacao || '',
+        foto_url: rec.foto_url || '',
+        auto: rec.auto || false,
       });
+    };
+
+    // Check online status
+    if (!navigator.onLine) {
+      // Queue offline
+      const queue = JSON.parse(localStorage.getItem('dpoint_offline_queue') || '[]');
+      queue.push(registro);
+      localStorage.setItem('dpoint_offline_queue', JSON.stringify(queue));
+      return;
+    }
+
+    try {
+      await saveToFirestore(registro);
+      // Attempt flushing offline queue
+      this.flushOfflineQueue();
     } catch (error) {
-      console.error('Erro ao salvar registro de ponto no Firestore:', error);
-      throw error;
+      console.warn('Erro ao salvar no Firestore (armazenando em fila offline):', error);
+      const queue = JSON.parse(localStorage.getItem('dpoint_offline_queue') || '[]');
+      queue.push(registro);
+      localStorage.setItem('dpoint_offline_queue', JSON.stringify(queue));
+    }
+  }
+
+  /** Flushes any queued offline records to Firestore when online */
+  public async flushOfflineQueue(): Promise<void> {
+    if (!navigator.onLine) return;
+    const raw = localStorage.getItem('dpoint_offline_queue');
+    if (!raw) return;
+
+    try {
+      const queue: RegistroPonto[] = JSON.parse(raw);
+      if (queue.length === 0) return;
+
+      const remaining: RegistroPonto[] = [];
+      for (const rec of queue) {
+        try {
+          const docRef = doc(db, 'registros', rec.id_registro);
+          await setDoc(docRef, rec);
+        } catch {
+          remaining.push(rec);
+        }
+      }
+      if (remaining.length > 0) {
+        localStorage.setItem('dpoint_offline_queue', JSON.stringify(remaining));
+      } else {
+        localStorage.removeItem('dpoint_offline_queue');
+      }
+    } catch (e) {
+      console.error('Erro ao descarregar fila offline:', e);
     }
   }
 
@@ -140,8 +186,18 @@ export class FirebaseService {
     }
   }
 
-  public async excluirFuncionario(id: string): Promise<void> {
+  public async excluirFuncionario(id: string, empresaId?: string): Promise<void> {
     try {
+      // If empresaId provided, verify ownership before deleting
+      if (empresaId) {
+        const docSnap = await getDoc(doc(db, 'funcionarios', id));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.empresa_id && data.empresa_id !== empresaId) {
+            throw new Error('Unauthorized: Cannot delete employee from another company');
+          }
+        }
+      }
       await deleteDoc(doc(db, 'funcionarios', id));
     } catch (error) {
       console.error('Erro ao excluir funcionário no Firestore:', error);
@@ -167,8 +223,18 @@ export class FirebaseService {
     }
   }
 
-  public async excluirLocal(id: string): Promise<void> {
+  public async excluirLocal(id: string, empresaId?: string): Promise<void> {
     try {
+      // If empresaId provided, verify ownership before deleting
+      if (empresaId) {
+        const docSnap = await getDoc(doc(db, 'locais', id));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.empresa_id && data.empresa_id !== empresaId) {
+            throw new Error('Unauthorized: Cannot delete location from another company');
+          }
+        }
+      }
       await deleteDoc(doc(db, 'locais', id));
     } catch (error) {
       console.error('Erro ao excluir local no Firestore:', error);
@@ -176,8 +242,18 @@ export class FirebaseService {
     }
   }
 
-  public async toggleFuncionarioStatus(id: string, status: 'Ativo' | 'Inativo'): Promise<void> {
+  public async toggleFuncionarioStatus(id: string, status: 'Ativo' | 'Inativo', empresaId?: string): Promise<void> {
     try {
+      // If empresaId provided, verify ownership before updating
+      if (empresaId) {
+        const docSnap = await getDoc(doc(db, 'funcionarios', id));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.empresa_id && data.empresa_id !== empresaId) {
+            throw new Error('Unauthorized: Cannot update employee from another company');
+          }
+        }
+      }
       const docRef = doc(db, 'funcionarios', id);
       await updateDoc(docRef, { status });
     } catch (error) {
@@ -186,9 +262,15 @@ export class FirebaseService {
     }
   }
 
-  /** Exclui TODOS os registros de ponto (em lotes de 400 por batch). */
-  public async clearRegistros(): Promise<void> {
-    const regsSnap = await getDocs(collection(db, 'registros'));
+  /** Exclui registros de ponto de uma empresa específica (em lotes de 400 por batch). */
+  public async clearRegistros(empresaId?: string): Promise<void> {
+    let q;
+    if (empresaId) {
+      q = query(collection(db, 'registros'), where('empresa_id', '==', empresaId));
+    } else {
+      q = collection(db, 'registros');
+    }
+    const regsSnap = await getDocs(q);
     const docsToDelete = regsSnap.docs;
     for (let i = 0; i < docsToDelete.length; i += 400) {
       const batch = writeBatch(db);
@@ -422,7 +504,7 @@ export class FirebaseService {
   // Trabalhador Avulso
   public async loadTrabalhador(uid: string): Promise<TrabalhadorAvulso | null> {
     try {
-      const docSnap = await getDoc(doc(db, 'trabalhadores_avulsos', uid));
+      const docSnap = await getDoc(doc(db, 'trabalhadores', uid));
       if (!docSnap.exists()) return null;
       return { id: docSnap.id, ...docSnap.data() } as TrabalhadorAvulso;
     } catch (error) {
@@ -433,7 +515,7 @@ export class FirebaseService {
 
   public async saveTrabalhador(trabalhador: TrabalhadorAvulso): Promise<void> {
     try {
-      const docRef = doc(db, 'trabalhadores_avulsos', trabalhador.id);
+      const docRef = doc(db, 'trabalhadores', trabalhador.id);
       await setDoc(docRef, trabalhador);
     } catch (error) {
       console.error('Erro ao salvar trabalhador:', error);
@@ -507,11 +589,10 @@ export class FirebaseService {
     try {
       const docRef = doc(db, 'sessoes_trabalho', sessao.id);
       await setDoc(docRef, sessao);
-      console.log('[FirebaseService] SessaoTrabalho salva:', sessao.id, sessao.trabalhador_id, sessao.obra_id, sessao.tipo);
 
       // Criar RegistroPonto correspondente para que o dashboard admin veja em tempo real
       const [trabalhadorSnap, obraSnap] = await Promise.all([
-        getDoc(doc(db, 'trabalhadores_avulsos', sessao.trabalhador_id)),
+        getDoc(doc(db, 'trabalhadores', sessao.trabalhador_id)),
         getDoc(doc(db, 'obras_pessoais', sessao.obra_id)),
       ]);
       const trabalhadorData = trabalhadorSnap.exists() ? trabalhadorSnap.data() : null;
@@ -522,21 +603,6 @@ export class FirebaseService {
         sessao.tipo === 'inicio' || sessao.tipo === 'pausa_fim' ? 'Check-in' : 'Check-out';
 
       const empresaId = obraData?.empresa_id || '';
-      console.log('[FirebaseService] Criando RegistroPonto:', registroId, {
-        id_funcionario: sessao.trabalhador_id,
-        nome_funcionario: trabalhadorData?.nome || 'Trabalhador',
-        id_local: sessao.obra_id,
-        nome_local: obraData?.nome || 'Obra',
-        empresa_id: empresaId,
-        tipo,
-        data_hora: sessao.data_hora,
-        latitude_registro: sessao.latitude,
-        longitude_registro: sessao.longitude,
-        precisao_gps: 0,
-        observacao: sessao.observacao || '',
-        dentro_geofence: sessao.dentro_geofence,
-        foto_url: sessao.foto_url || ''
-      });
 
       await setDoc(doc(db, 'registros', registroId), {
         id_funcionario: sessao.trabalhador_id,

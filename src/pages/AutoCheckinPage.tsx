@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapPin, Play, Square, User, Bell, BellOff, Navigation, CheckCircle2, Loader2 } from 'lucide-react';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
 import PageHeader from '../components/layouts/PageHeader';
+import AutoCheckinPrompt from '../components/AutoCheckinPrompt';
 import { dataService } from '../utils/gasClient';
 import { useAuth } from '../hooks/useAuth';
 import { useI18n } from '../i18n';
@@ -20,6 +21,8 @@ export default function AutoCheckinPage() {
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const [loading, setLoading] = useState(true);
   const [lastEvent, setLastEvent] = useState<{ type: string; local: string; time: string } | null>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptEvent, setPromptEvent] = useState<{ local: LocalServico; eventType: 'enter' | 'exit'; position: { lat: number; lng: number; accuracy: number } } | null>(null);
 
   const empresaId = isSuperAdmin ? undefined : empresaAdmin?.empresa_id || undefined;
   const selectedFunc = funcionarios.find(f => f.id_funcionario === selectedFuncId) || null;
@@ -41,33 +44,56 @@ export default function AutoCheckinPage() {
     }
   };
 
+  const sendNotification = useCallback((title: string, body: string, tag: string) => {
+    if (notifPermission === 'granted') {
+      try { new Notification(title, { body, icon: '/favicon.ico', tag }); } catch {}
+    }
+  }, [notifPermission]);
+
   const autoLocais = useMemo(() => locais.filter(l => l.raio_auto_checkin && l.raio_auto_checkin > 0), [locais]);
 
   const handleGeofenceEvent = useCallback(async (event: { local: LocalServico; eventType: 'enter' | 'exit'; position: { lat: number; lng: number; accuracy: number }; timestamp: string }) => {
     if (!selectedFunc) return;
     const { local, eventType, position } = event;
 
-    if (notifPermission === 'granted') {
-      const title = eventType === 'enter' ? t('autoCheckin.checkinTitle') : t('autoCheckin.checkoutTitle');
-      const body = `${selectedFunc.nome} — ${local.nome_empresa}`;
-      try { new Notification(title, { body, icon: '/favicon.ico', tag: `geofence-${local.id_local}` }); } catch {}
-    }
+    // Send native notification
+    const title = eventType === 'enter' ? t('autoCheckin.notifEnterTitle') : t('autoCheckin.notifExitTitle');
+    const body = `${selectedFunc.nome} — ${local.nome_empresa}`;
+    sendNotification(title, body, `geofence-${local.id_local}`);
+
+    // Open prompt for user confirmation
+    setPromptEvent({ local, eventType, position });
+    setPromptOpen(true);
+  }, [selectedFunc, sendNotification, t]);
+
+  const { isMonitoring, currentPosition, nearbyLocais } = useGeofenceMonitor({
+    locais,
+    registros,
+    enabled: monitoring && !!selectedFunc,
+    onGeofenceEvent: handleGeofenceEvent,
+    onNotification: sendNotification,
+  });
+
+  const handlePromptConfirm = useCallback(async (data: { observacao: string; photoUrl: string | null; tipo: 'Check-in' | 'Check-out' }) => {
+    if (!promptEvent || !selectedFunc) return;
+    const { local, eventType, position } = promptEvent;
 
     const registro: RegistroPonto = {
       id_registro: `AUTO-${Date.now()}`,
       id_funcionario: selectedFunc.id_funcionario,
       id_local: local.id_local,
       empresa_id: local.empresa_id || selectedFunc.empresa_id || '',
-      tipo: eventType === 'enter' ? 'Check-in' : 'Check-out',
+      tipo: data.tipo,
       data_hora: new Date().toISOString(),
       latitude_registro: position.lat,
       longitude_registro: position.lng,
       precisao_gps: Math.round(position.accuracy),
-      observacao: 'Auto check-in/out por geofence',
+      observacao: data.observacao || 'Auto check-in/out por geofence',
       nome_funcionario: selectedFunc.nome,
       nome_local: local.nome_empresa,
       dentro_geofence: true,
       tipo_verificacao: 'GPS',
+      foto_url: data.photoUrl || undefined,
       auto: true,
     };
 
@@ -75,21 +101,54 @@ export default function AutoCheckinPage() {
       await dataService.registrarPonto(registro);
       setRegistros(prev => [registro, ...prev]);
       setLastEvent({
-        type: eventType === 'enter' ? 'Check-in' : 'Check-out',
+        type: data.tipo,
         local: local.nome_empresa,
         time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       });
     } catch (err) {
       console.error('Erro ao registrar ponto automático:', err);
     }
-  }, [selectedFunc, notifPermission, t]);
+    setPromptOpen(false);
+    setPromptEvent(null);
+  }, [promptEvent, selectedFunc]);
 
-  const { isMonitoring, currentPosition, nearbyLocais } = useGeofenceMonitor({
-    locais,
-    registros,
-    enabled: monitoring && !!selectedFunc,
-    onGeofenceEvent: handleGeofenceEvent,
-  });
+  const handlePromptDismiss = useCallback((tipo: 'Check-in' | 'Check-out') => {
+    if (tipo === 'Check-out') return; // Cannot dismiss checkout
+    // For check-in, save auto record
+    if (!promptEvent || !selectedFunc) return;
+    const { local, position } = promptEvent;
+
+    const registro: RegistroPonto = {
+      id_registro: `AUTO-${Date.now()}`,
+      id_funcionario: selectedFunc.id_funcionario,
+      id_local: local.id_local,
+      empresa_id: local.empresa_id || selectedFunc.empresa_id || '',
+      tipo: 'Check-in',
+      data_hora: new Date().toISOString(),
+      latitude_registro: position.lat,
+      longitude_registro: position.lng,
+      precisao_gps: Math.round(position.accuracy),
+      observacao: 'Auto check-in por geofence',
+      nome_funcionario: selectedFunc.nome,
+      nome_local: local.nome_empresa,
+      dentro_geofence: true,
+      tipo_verificacao: 'GPS',
+      auto: true,
+    };
+
+    dataService.registrarPonto(registro).then(() => {
+      setRegistros(prev => [registro, ...prev]);
+      setLastEvent({
+        type: 'Check-in',
+        local: local.nome_empresa,
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      });
+    }).catch(err => {
+      console.error('Erro ao registrar ponto automático:', err);
+    });
+    setPromptOpen(false);
+    setPromptEvent(null);
+  }, [promptEvent, selectedFunc]);
 
   const todayRecords = useMemo(() => {
     if (!selectedFunc) return [];
@@ -228,6 +287,19 @@ export default function AutoCheckinPage() {
           </div>
         </Card>
       )}
+
+      <AutoCheckinPrompt
+        isOpen={promptOpen}
+        onClose={() => { setPromptOpen(false); setPromptEvent(null); }}
+        local={promptEvent?.local || null}
+        eventType={promptEvent?.eventType || 'enter'}
+        position={promptEvent?.position || { lat: 0, lng: 0, accuracy: 0 }}
+        selectedFunc={selectedFunc ? { id_funcionario: selectedFunc.id_funcionario, nome: selectedFunc.nome } : null}
+        onConfirm={handlePromptConfirm}
+        onDismiss={handlePromptDismiss}
+        requirePhoto={promptEvent?.eventType === 'exit'}
+        requireObservation={promptEvent?.eventType === 'exit'}
+      />
     </div>
   );
 }

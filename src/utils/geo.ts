@@ -12,12 +12,19 @@ export function haversineDistance(lat1: number, lng1: number, lat2: number, lng2
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/**
+ * Verifica se o ponto está dentro do raio, considerando a acurácia do GPS.
+ * A comparação é: distância <= raio + acurácia
+ * Isso permite que um fix GPS com 15m de erro ainda seja aceito dentro de um raio de 50m.
+ */
 export function isWithinRadius(
   lat1: number,
   lng1: number,
   lat2: number,
   lng2: number,
-  radiusMeters: number
+  radiusMeters: number,
+  accuracyMeters: number = 0
 ): boolean {
-  return haversineDistance(lat1, lng1, lat2, lng2) <= radiusMeters;
+  const distance = haversineDistance(lat1, lng1, lat2, lng2);
+  return distance <= radiusMeters + accuracyMeters;
 }

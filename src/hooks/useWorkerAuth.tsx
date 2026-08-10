@@ -55,7 +55,7 @@ export function WorkerAuthProvider({ children }: { children: ReactNode }) {
 
   const loadTrabalhador = async (uid: string): Promise<TrabalhadorAvulso | null> => {
     try {
-      const docSnap = await getDoc(doc(db, 'trabalhadores_avulsos', uid));
+      const docSnap = await getDoc(doc(db, 'trabalhadores', uid));
       if (!docSnap.exists()) return null;
       return { id: docSnap.id, ...docSnap.data() } as TrabalhadorAvulso;
     } catch (error) {
@@ -97,7 +97,7 @@ export function WorkerAuthProvider({ children }: { children: ReactNode }) {
         updated_at: agora,
       };
       
-      await setDoc(doc(db, 'trabalhadores_avulsos', cred.user.uid), trabalhador);
+      await setDoc(doc(db, 'trabalhadores', cred.user.uid), trabalhador);
       setTrabalhador(trabalhador);
     } catch (err: any) {
       let msg = t('auth.errGeneric');
@@ -128,7 +128,7 @@ export function WorkerAuthProvider({ children }: { children: ReactNode }) {
           created_at: agora,
           updated_at: agora,
         };
-        await setDoc(doc(db, 'trabalhadores_avulsos', cred.user.uid), novoTrabalhador);
+        await setDoc(doc(db, 'trabalhadores', cred.user.uid), novoTrabalhador);
         setTrabalhador(novoTrabalhador);
       }
     } catch (err: any) {
@@ -159,7 +159,7 @@ export function WorkerAuthProvider({ children }: { children: ReactNode }) {
           created_at: agora,
           updated_at: agora,
         };
-        await setDoc(doc(db, 'trabalhadores_avulsos', cred.user.uid), novoTrabalhador);
+        await setDoc(doc(db, 'trabalhadores', cred.user.uid), novoTrabalhador);
         setTrabalhador(novoTrabalhador);
       }
     } catch (err: any) {
@@ -181,7 +181,7 @@ export function WorkerAuthProvider({ children }: { children: ReactNode }) {
     if (!user || !trabalhador) return;
     try {
       const updated = { ...trabalhador, ...data, updated_at: new Date().toISOString() };
-      await setDoc(doc(db, 'trabalhadores_avulsos', user.uid), updated);
+      await setDoc(doc(db, 'trabalhadores', user.uid), updated);
       setTrabalhador(updated);
     } catch (err) {
       console.error('Erro ao atualizar trabalhador:', err);

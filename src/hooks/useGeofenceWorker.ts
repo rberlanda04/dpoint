@@ -14,6 +14,7 @@ interface UseGeofenceWorkerOptions {
   sessoes: SessaoTrabalho[];
   enabled: boolean;
   onGeofenceEvent: (event: GeofenceEvent) => void;
+  onNotification?: (title: string, body: string, tag: string) => void;
   minIntervalMs?: number;
 }
 
@@ -22,6 +23,7 @@ export function useGeofenceWorker({
   sessoes,
   enabled,
   onGeofenceEvent,
+  onNotification,
   minIntervalMs = 5 * 60 * 1000,
 }: UseGeofenceWorkerOptions) {
   const watchIdRef = useRef<number | null>(null);
@@ -49,7 +51,7 @@ export function useGeofenceWorker({
         obra.latitude, obra.longitude
       );
 
-      const isInside = distance <= radius;
+      const isInside = distance <= radius + position.accuracy;
       const lastEventTime = lastEventRef.current.get(obra.id) || 0;
 
       if (now - lastEventTime < minIntervalMs) return;
@@ -66,6 +68,13 @@ export function useGeofenceWorker({
           position,
           timestamp: new Date().toISOString(),
         });
+        if (onNotification) {
+          onNotification(
+            '📍 Entrada detectada',
+            `${obra.nome} — ${obra.endereco}`,
+            `geofence-worker-enter-${obra.id}`
+          );
+        }
       } else if (!isInside && prevInside) {
         lastEventRef.current.set(obra.id, now);
         localStorage.setItem(prevStateKey, 'false');
@@ -75,6 +84,13 @@ export function useGeofenceWorker({
           position,
           timestamp: new Date().toISOString(),
         });
+        if (onNotification) {
+          onNotification(
+            '📍 Saída detectada',
+            `${obra.nome} — ${obra.endereco}`,
+            `geofence-worker-exit-${obra.id}`
+          );
+        }
       }
     });
 
@@ -83,13 +99,13 @@ export function useGeofenceWorker({
         obra,
         distance: haversineDistance(position.lat, position.lng, obra.latitude, obra.longitude),
       }))
-      .filter(d => d.distance <= (d.obra.raio_metros * 2))
+      .filter(d => d.distance <= (d.obra.raio_metros + position.accuracy) * 1.5)
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 5)
       .map(d => d.obra);
     
     setNearbyObras(nearby);
-  }, [autoObras, minIntervalMs, onGeofenceEvent]);
+  }, [autoObras, minIntervalMs, onGeofenceEvent, onNotification]);
 
   useEffect(() => {
     if (!enabled || !navigator.geolocation) {

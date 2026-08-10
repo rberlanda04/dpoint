@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MapPin, Clock, PlayCircle, PauseCircle, Loader2, AlertTriangle, CheckCircle2, Camera, X } from 'lucide-react';
 import { Button, Card, Badge, EmptyState } from '../../components/ui';
 import PageHeader from '../../components/layouts/PageHeader';
+import WorkerAutoCheckinOverlay from '../../components/worker/WorkerAutoCheckinOverlay';
 import { useWorkerAuth } from '../../hooks/useWorkerAuth';
 import { useWorkerData } from '../../hooks/useWorkerData';
 import { useGeofenceWorker } from '../../hooks/useGeofenceWorker';
@@ -51,16 +52,29 @@ export default function WorkerCheckInPage() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [observacao, setObservacao] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [overlayEvent, setOverlayEvent] = useState<{ obra: typeof ativas[0]; eventType: 'enter' | 'exit'; position: { lat: number; lng: number; accuracy: number } } | null>(null);
 
   const ativas = obras.filter(o => o.ativa);
+
+  const sendNotification = useCallback((title: string, body: string, tag: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try { new Notification(title, { body, icon: '/favicon.ico', tag }); } catch {}
+    }
+  }, []);
 
   const { isMonitoring, nearbyObras } = useGeofenceWorker({
     obras: ativas,
     sessoes: sessoes,
     enabled: !!trabalhador && !!trabalhador.id && ativas.length > 0,
-    onGeofenceEvent: () => {
-      refresh();
+    onGeofenceEvent: (event) => {
+      const { obra, eventType, position } = event;
+      const title = eventType === 'enter' ? '📍 Entrada detectada' : '📍 Saída detectada';
+      sendNotification(title, `${obra.nome} — ${obra.endereco}`, `geofence-worker-${eventType}-${obra.id}`);
+      setOverlayEvent({ obra, eventType, position });
+      setOverlayOpen(true);
     },
+    onNotification: sendNotification,
     minIntervalMs: 3 * 60 * 1000,
   });
 
@@ -158,6 +172,45 @@ export default function WorkerCheckInPage() {
       const compressed = await compressImage(file, 800, 0.6);
       setPhotoUrl(compressed);
     }
+  };
+
+  const handleOverlayConfirm = async (data: { observacao: string; photoUrl: string | null; tipo: 'inicio' | 'fim' }) => {
+    if (!trabalhador || !overlayEvent) return;
+    setRegistering(true);
+
+    try {
+      const id = generateId('sess');
+      let fotoFinal: string | null = null;
+      if (data.photoUrl) {
+        fotoFinal = await uploadPhotoEvidence(data.photoUrl, id);
+      }
+
+      const sessao: SessaoTrabalho = {
+        id,
+        trabalhador_id: trabalhador.id,
+        obra_id: overlayEvent.obra.id,
+        tipo: data.tipo,
+        data_hora: new Date().toISOString(),
+        latitude: overlayEvent.position.lat,
+        longitude: overlayEvent.position.lng,
+        dentro_geofence: true,
+        observacao: data.observacao || undefined,
+        foto_url: fotoFinal || undefined,
+      };
+
+      await dataService.saveSessaoTrabalho(sessao);
+      await refresh();
+    } catch (err) {
+      console.error('Erro ao registrar sessão automática:', err);
+    }
+    setRegistering(false);
+    setOverlayOpen(false);
+    setOverlayEvent(null);
+  };
+
+  const handleOverlayDismiss = () => {
+    setOverlayOpen(false);
+    setOverlayEvent(null);
   };
 
   if (!trabalhador) {
@@ -315,6 +368,17 @@ export default function WorkerCheckInPage() {
           })}
         </div>
       )}
+
+      <WorkerAutoCheckinOverlay
+        isOpen={overlayOpen}
+        onClose={handleOverlayDismiss}
+        obra={overlayEvent?.obra || null}
+        eventType={overlayEvent?.eventType || 'enter'}
+        position={overlayEvent?.position || { lat: 0, lng: 0, accuracy: 0 }}
+        workerName={trabalhador?.nome || ''}
+        onConfirm={handleOverlayConfirm}
+        onDismiss={handleOverlayDismiss}
+      />
     </div>
   );
 }

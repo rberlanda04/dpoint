@@ -183,9 +183,9 @@ export class DataService {
     return funcionario;
   }
 
-  public async excluirFuncionario(id: string): Promise<void> {
+  public async excluirFuncionario(id: string, empresaId?: string): Promise<void> {
     if (this.config.mode === 'firebase') {
-      await firebaseService.excluirFuncionario(id);
+      await firebaseService.excluirFuncionario(id, empresaId);
     }
     this.localDb.funcionarios = this.localDb.funcionarios.filter(f => f.id_funcionario !== id);
     saveDatabase(this.localDb);
@@ -219,17 +219,17 @@ export class DataService {
     return local;
   }
 
-  public async excluirLocal(id: string): Promise<void> {
+  public async excluirLocal(id: string, empresaId?: string): Promise<void> {
     if (this.config.mode === 'firebase') {
-      await firebaseService.excluirLocal(id);
+      await firebaseService.excluirLocal(id, empresaId);
     }
     this.localDb.locais = this.localDb.locais.filter(l => l.id_local !== id);
     saveDatabase(this.localDb);
   }
 
-  public async toggleFuncionarioStatus(id: string, novoStatus: 'Ativo' | 'Inativo'): Promise<void> {
+  public async toggleFuncionarioStatus(id: string, novoStatus: 'Ativo' | 'Inativo', empresaId?: string): Promise<void> {
     if (this.config.mode === 'firebase') {
-      await firebaseService.toggleFuncionarioStatus(id, novoStatus);
+      await firebaseService.toggleFuncionarioStatus(id, novoStatus, empresaId);
     }
 
     if (this.config.mode === 'gas' && this.config.gasUrl) {
@@ -264,12 +264,16 @@ export class DataService {
     return { ...db, registros: enriched };
   }
 
-  /** Remove todos os registros de ponto (local e remoto). */
-  public async clearAllRegistros(): Promise<void> {
+  /** Remove todos os registros de ponto de uma empresa específica (local e remoto). */
+  public async clearAllRegistros(empresaId?: string): Promise<void> {
     if (this.config.mode === 'firebase') {
-      await firebaseService.clearRegistros();
+      await firebaseService.clearRegistros(empresaId);
     }
-    this.localDb = { ...this.localDb, registros: [] };
+    if (empresaId) {
+      this.localDb = { ...this.localDb, registros: this.localDb.registros.filter(r => r.empresa_id !== empresaId) };
+    } else {
+      this.localDb = { ...this.localDb, registros: [] };
+    }
     saveDatabase(this.localDb);
   }
 
@@ -717,7 +721,6 @@ export class DataService {
     const poll = async () => {
       const d = await this.loadAllData(empresaId, false);
       onData(d.registros);
-      console.log('[DataService] Listener de registros atualizado (polling):', d.registros.length, 'empresaId:', empresaId);
     };
     poll();
     const intervalId = setInterval(poll, 30000);
@@ -735,7 +738,6 @@ export class DataService {
     const poll = async () => {
       const d = await this.loadAllData(empresaId, false);
       onData(d.locais);
-      console.log('[DataService] Listener de locais atualizado (polling):', d.locais.length, 'empresaId:', empresaId);
     };
     poll();
     const intervalId = setInterval(poll, 30000);
@@ -753,7 +755,6 @@ export class DataService {
     const poll = async () => {
       const d = await this.loadAllData(empresaId, false);
       onData(d.funcionarios);
-      console.log('[DataService] Listener de funcionários atualizado (polling):', d.funcionarios.length, 'empresaId:', empresaId);
     };
     poll();
     const intervalId = setInterval(poll, 30000);

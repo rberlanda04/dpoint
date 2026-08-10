@@ -119,100 +119,216 @@ export default function DashboardOverview() {
     { name: 'Check-out', value: checkoutsHoje },
   ];
 
+  // ─── Cálculo de jornada (horas trabalhadas hoje) ───────────────
+  const horasTrabalhadasHoje = (() => {
+    // Agrupa registros de hoje por funcionário
+    const byEmployee = new Map<string, { checkins: Date[]; checkouts: Date[] }>();
+    for (const r of registrosHoje) {
+      const emp = r.id_funcionario;
+      if (!byEmployee.has(emp)) byEmployee.set(emp, { checkins: [], checkouts: [] });
+      const entry = byEmployee.get(emp)!;
+      const dt = new Date(r.data_hora);
+      if (r.tipo === 'Check-in') entry.checkins.push(dt);
+      else entry.checkouts.push(dt);
+    }
+
+    let totalMinutes = 0;
+    for (const [, { checkins, checkouts }] of byEmployee) {
+      // Ordena cronologicamente
+      checkins.sort((a, b) => a.getTime() - b.getTime());
+      checkouts.sort((a, b) => a.getTime() - b.getTime());
+      // Emparelha: cada check-in com o check-out seguinte
+      const pairs = Math.min(checkins.length, checkouts.length);
+      for (let i = 0; i < pairs; i++) {
+        const diff = checkouts[i].getTime() - checkins[i].getTime();
+        if (diff > 0) totalMinutes += diff / 60000;
+      }
+    }
+    const h = Math.floor(totalMinutes / 60);
+    const m = Math.round(totalMinutes % 60);
+    return { total: `${h}h${m > 0 ? String(m).padStart(2, '0') : ''}`, minutes: totalMinutes };
+  })();
+
+  // Funcionários que fizeram check-in mas NÃO check-out hoje
+  const funcionariosEmCampo = (() => {
+    const empCheckins = new Map<string, number>();
+    const empCheckouts = new Map<string, number>();
+    for (const r of registrosHoje) {
+      if (r.tipo === 'Check-in') {
+        empCheckins.set(r.id_funcionario, (empCheckins.get(r.id_funcionario) || 0) + 1);
+      } else {
+        empCheckouts.set(r.id_funcionario, (empCheckouts.get(r.id_funcionario) || 0) + 1);
+      }
+    }
+    let count = 0;
+    for (const [emp, ci] of empCheckins) {
+      const co = empCheckouts.get(emp) || 0;
+      if (ci > co) count++;
+    }
+    return count;
+  })();
+
   const ultimosRegistros = data.registros.slice(0, 8);
 
   return (
-    <div className="p-6 lg:p-8">
-      <PageHeader
-        title={t('dash.title')}
-        subtitle={t('dash.subtitle')}
-        action={
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer border-0 bg-transparent"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {t('common.refresh')}
-          </button>
-        }
-      />
+    <div className="p-6 lg:p-8 font-sans">
+    {/* Hero Section */}
+    <div className="bg-gradient-to-br from-emerald-600 to-teal-800 rounded-3xl p-6 lg:p-8 text-white mb-8 shadow-xl shadow-emerald-900/10 relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+      <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-black tracking-tight mb-2">Visão Geral da Operação</h1>
+          <p className="text-emerald-50/80 max-w-lg text-sm leading-relaxed">
+            Resumo diário da sua equipe. Hoje, <strong>{funcionariosEmCampo}</strong> trabalhadores estão ativos em campo através de <strong>{locationStats.length}</strong> locais diferentes.
+          </p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-sm font-bold text-white transition-all cursor-pointer border border-white/10"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          Atualizar Agora
+        </button>
+      </div>
+    </div>
 
-      {/* KPI Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    {/* KPI Metrics Grid */}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <MetricCard
+        label={t('dash.activeEmployees')}
+        value={funcionariosAtivos}
+        icon={Users}
+        color="indigo"
+      />
+      <MetricCard
+        label={t('dash.registeredSites')}
+        value={data.locais.length}
+        icon={MapPin}
+        color="emerald"
+      />
+      <MetricCard
+        label={t('dash.recordsToday')}
+        value={registrosHoje.length}
+        icon={ClipboardList}
+        color="sky"
+      />
+      <MetricCard
+        label={t('dash.teamInField')}
+        value={trabalhadoresAtivosHoje}
+        icon={TrendingUp}
+        color="amber"
+      />
+    </div>
+
+    {/* Secondary Stats */}
+    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+      <MetricCard
+        label={t('dash.checkinsToday')}
+        value={checkinsHoje}
+        icon={CheckCircle2}
+        color="emerald"
+      />
+      <MetricCard
+        label={t('dash.checkoutsToday')}
+        value={checkoutsHoje}
+        icon={Clock}
+        color="indigo"
+      />
+      <MetricCard
+        label={lang === 'pt' ? 'Horas trabalhadas hoje' : 'Hours worked today'}
+        value={horasTrabalhadasHoje.total}
+        icon={Activity}
+        color="sky"
+      />
+      {funcionariosEmCampo > 0 && (
         <MetricCard
-          label={t('dash.activeEmployees')}
-          value={funcionariosAtivos}
-          icon={Users}
-          color="indigo"
-        />
-        <MetricCard
-          label={t('dash.registeredSites')}
-          value={data.locais.length}
-          icon={MapPin}
-          color="emerald"
-        />
-        <MetricCard
-          label={t('dash.recordsToday')}
-          value={registrosHoje.length}
-          icon={ClipboardList}
-          color="sky"
-        />
-        <MetricCard
-          label={t('dash.teamInField')}
-          value={trabalhadoresAtivosHoje}
+          label={lang === 'pt' ? 'Em campo agora' : 'In field now'}
+          value={funcionariosEmCampo}
           icon={TrendingUp}
           color="amber"
         />
-      </div>
+      )}
+      {registrosForaGeofence > 0 && (
+        <MetricCard
+          label={t('dash.outsideGeofence')}
+          value={registrosForaGeofence}
+          icon={AlertTriangle}
+          color="rose"
+        />
+      )}
+    </div>
 
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <MetricCard
-          label={t('dash.checkinsToday')}
-          value={checkinsHoje}
-          icon={CheckCircle2}
-          color="emerald"
-        />
-        <MetricCard
-          label={t('dash.checkoutsToday')}
-          value={checkoutsHoje}
-          icon={Clock}
-          color="indigo"
-        />
-        {registrosForaGeofence > 0 && (
-          <MetricCard
-            label={t('dash.outsideGeofence')}
-            value={registrosForaGeofence}
-            icon={AlertTriangle}
-            color="rose"
-          />
+    {/* Charts Grid */}
+    {(hourlyData.some(h => h.registros > 0) || locationStats.length > 0) && (
+      <div className="grid lg:grid-cols-2 gap-4 mb-6">
+        {hourlyData.some(h => h.registros > 0) && (
+          <ChartCard
+            title={t('dash.recordsByHour')}
+            subtitle="Distribuição de registros ao longo do dia"
+            icon={BarChart3}
+          >
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={hourlyData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
+                <XAxis
+                  dataKey="hora"
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: '12px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                    fontSize: '12px',
+                  }}
+                />
+                <Bar
+                  dataKey="registros"
+                  fill="url(#barGradient)"
+                  radius={[6, 6, 0, 0]}
+                />
+                <defs>
+                  <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" />
+                    <stop offset="100%" stopColor="#14b8a6" />
+                  </linearGradient>
+                </defs>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
         )}
-      </div>
 
-      {/* Charts Grid */}
-      {(hourlyData.some(h => h.registros > 0) || locationStats.length > 0) && (
-        <div className="grid lg:grid-cols-2 gap-4 mb-6">
-          {hourlyData.some(h => h.registros > 0) && (
-            <ChartCard
-              title={t('dash.recordsByHour')}
-              subtitle="Distribuição de registros ao longo do dia"
-              icon={BarChart3}
-            >
+        {tipoData.some(tp => tp.value > 0) && (
+          <ChartCard
+            title={t('dash.inVsOut')}
+            subtitle="Proporção check-in vs check-out"
+            icon={Activity}
+          >
+            <div className="flex items-center justify-center">
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={hourlyData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-                  <XAxis
-                    dataKey="hora"
-                    tick={{ fontSize: 10, fill: '#94a3b8' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 10, fill: '#94a3b8' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
+                <PieChart>
+                  <Pie
+                    data={tipoData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={4}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {tipoData.map((_, index) => (
+                      <Cell key={index} fill={index === 0 ? '#10b981' : '#0ea5e9'} />
+                    ))}
+                  </Pie>
                   <Tooltip
                     contentStyle={{
                       borderRadius: '12px',
@@ -221,179 +337,140 @@ export default function DashboardOverview() {
                       fontSize: '12px',
                     }}
                   />
-                  <Bar
-                    dataKey="registros"
-                    fill="url(#barGradient)"
-                    radius={[6, 6, 0, 0]}
-                  />
-                  <defs>
-                    <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" />
-                      <stop offset="100%" stopColor="#818cf8" />
-                    </linearGradient>
-                  </defs>
-                </BarChart>
+                </PieChart>
               </ResponsiveContainer>
-            </ChartCard>
-          )}
-
-          {tipoData.some(tp => tp.value > 0) && (
-            <ChartCard
-              title={t('dash.inVsOut')}
-              subtitle="Proporção check-in vs check-out"
-              icon={Activity}
-            >
-              <div className="flex items-center justify-center">
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie
-                      data={tipoData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={90}
-                      paddingAngle={4}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {tipoData.map((_, index) => (
-                        <Cell key={index} fill={index === 0 ? '#10b981' : '#6366f1'} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid #e2e8f0',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                        fontSize: '12px',
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+            </div>
+            <div className="flex justify-center gap-6 mt-2">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm" />
+                <span className="text-xs text-slate-500 font-medium">Check-in ({checkinsHoje})</span>
               </div>
-              <div className="flex justify-center gap-6 mt-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm" />
-                  <span className="text-xs text-slate-500 font-medium">Check-in ({checkinsHoje})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-indigo-500 shadow-sm" />
-                  <span className="text-xs text-slate-500 font-medium">Check-out ({checkoutsHoje})</span>
-                </div>
-              </div>
-            </ChartCard>
-          )}
-        </div>
-      )}
-
-      {/* Top Locations */}
-      {locationStats.length > 0 && (
-        <ChartCard
-          title={t('dash.topSites')}
-          subtitle="Locais com mais registros hoje"
-          icon={MapPin}
-          className="mb-6"
-        >
-          <ResponsiveContainer width="100%" height={Math.max(160, locationStats.length * 40)}>
-            <BarChart data={locationStats} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 5 }}>
-              <XAxis
-                type="number"
-                allowDecimals={false}
-                tick={{ fontSize: 10, fill: '#94a3b8' }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                tick={{ fontSize: 11, fill: '#475569' }}
-                width={130}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: '12px',
-                  border: '1px solid #e2e8f0',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                  fontSize: '12px',
-                }}
-              />
-              <Bar
-                dataKey="registros"
-                fill="url(#horizontalGradient)"
-                radius={[0, 6, 6, 0]}
-              />
-              <defs>
-                <linearGradient id="horizontalGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#06b6d4" />
-                  <stop offset="100%" stopColor="#22d3ee" />
-                </linearGradient>
-              </defs>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      )}
-
-      {/* Recent Activity */}
-      <GridLineCard padding="none">
-        <div className="p-5 border-b border-slate-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
-                <Activity className="w-4 h-4 text-violet-600" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800">{t('dash.recentActivity')}</h3>
-                <p className="text-[11px] text-slate-400">Últimos registros de ponto</p>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-sky-500 shadow-sm" />
+                <span className="text-xs text-slate-500 font-medium">Check-out ({checkoutsHoje})</span>
               </div>
             </div>
-            <button
-              onClick={() => navigate('/app/dashboard/registros')}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer border-0 bg-transparent"
-            >
-              {t('dash.viewAll')}
-            </button>
+          </ChartCard>
+        )}
+      </div>
+    )}
+
+    {/* Top Locations */}
+    {locationStats.length > 0 && (
+      <ChartCard
+        title={t('dash.topSites')}
+        subtitle="Locais com mais registros hoje"
+        icon={MapPin}
+        className="mb-6"
+      >
+        <ResponsiveContainer width="100%" height={Math.max(160, locationStats.length * 40)}>
+          <BarChart data={locationStats} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 5 }}>
+            <XAxis
+              type="number"
+              allowDecimals={false}
+              tick={{ fontSize: 10, fill: '#94a3b8' }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              tick={{ fontSize: 11, fill: '#475569' }}
+              width={130}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip
+              contentStyle={{
+                borderRadius: '12px',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                fontSize: '12px',
+              }}
+            />
+            <Bar
+              dataKey="registros"
+              fill="url(#horizontalGradient)"
+              radius={[0, 6, 6, 0]}
+            />
+            <defs>
+              <linearGradient id="horizontalGradient" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#0ea5e9" />
+                <stop offset="100%" stopColor="#38bdf8" />
+              </linearGradient>
+            </defs>
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+    )}
+
+    {/* Recent Activity */}
+    <GridLineCard padding="none">
+      <div className="p-5 border-b border-slate-100">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
+              <Activity className="w-4 h-4 text-violet-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">{t('dash.recentActivity')}</h3>
+              <p className="text-[11px] text-slate-400">Últimos registros de ponto</p>
+            </div>
           </div>
+          <button
+            onClick={() => navigate('/app/dashboard/registros')}
+            className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer border-0 bg-transparent"
+          >
+            {t('dash.viewAll')}
+          </button>
         </div>
-        <div className="p-5">
-          {ultimosRegistros.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">{t('dash.noRecords')}</p>
-          ) : (
-            <div className="space-y-1">
-              {ultimosRegistros.map((reg: any) => (
-                <div
-                  key={reg.id_registro}
-                  className="flex items-center justify-between py-3 px-3 -mx-3 rounded-xl hover:bg-slate-50/80 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                      reg.tipo === 'Check-in' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {reg.tipo === 'Check-in' ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">{reg.nome_funcionario || `Func. #${reg.id_funcionario}`}</p>
-                      <p className="text-xs text-slate-400">{reg.nome_local || `Local #${reg.id_local}`}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <Badge variant={reg.tipo === 'Check-in' ? 'success' : 'default'}>
-                      {reg.tipo}
-                    </Badge>
-                    <p className="text-[10px] text-slate-400 mt-1 tabular-nums">
-                      {new Date(reg.data_hora).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    {!reg.dentro_geofence && reg.dentro_geofence !== undefined && (
-                      <p className="text-[10px] text-amber-500 font-medium">{t('dash.outsideGeofence')}</p>
-                    )}
-                  </div>
+      </div>
+      <div className="p-5">
+        {ultimosRegistros.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-8">{t('dash.noRecords')}</p>
+        ) : (
+          <div className="relative pl-6 space-y-6 before:absolute before:inset-y-2 before:left-2.5 before:w-px before:bg-slate-200">
+            {ultimosRegistros.map((reg: any) => (
+              <div
+                key={reg.id_registro}
+                className="relative group"
+              >
+                <div className={`absolute -left-[30px] top-1 w-5 h-5 rounded-full border-4 border-white flex items-center justify-center z-10 ${reg.tipo === 'Check-in' ? 'bg-emerald-500' : 'bg-slate-400'
+                  }`}>
+                  {reg.tipo === 'Check-in' ? <CheckCircle2 className="w-2.5 h-2.5 text-white" /> : <Clock className="w-2.5 h-2.5 text-white" />}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </GridLineCard>
-    </div>
+
+                <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm hover:shadow-md transition-shadow group-hover:border-emerald-100">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{reg.nome_funcionario || `Func. #${reg.id_funcionario}`}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <MapPin className="w-3 h-3 text-slate-400" />
+                        <p className="text-xs font-medium text-slate-500">{reg.nome_local || `Local #${reg.id_local}`}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <Badge variant={reg.tipo === 'Check-in' ? 'success' : 'default'} className="uppercase text-[9px] font-black tracking-wider">
+                        {reg.tipo}
+                      </Badge>
+                      <p className="text-[11px] font-semibold text-slate-400 mt-1.5">
+                        {new Date(reg.data_hora).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                  {!reg.dentro_geofence && reg.dentro_geofence !== undefined && (
+                    <div className="mt-3 flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 rounded-lg w-fit">
+                      <AlertTriangle className="w-3 h-3 text-rose-500" />
+                      <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wide">Fora do Raio</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </GridLineCard>
+  </div>
   );
 }

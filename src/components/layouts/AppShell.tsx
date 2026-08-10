@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, MapPin, ClipboardList, Settings, LogOut, ChevronLeft, Menu, Radio } from 'lucide-react';
+import { Home, Users, MapPin, ClipboardList, Settings, LogOut, ChevronLeft, Menu, Radio, Briefcase } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useI18n } from '../../i18n';
 import { TranslationKey } from '../../i18n/pt';
@@ -13,6 +13,7 @@ const NAV_ITEMS: { to: string; icon: any; labelKey: TranslationKey; end?: boolea
   { to: '/app/dashboard/obras', icon: MapPin, labelKey: 'nav.sites' },
   { to: '/app/dashboard/registros', icon: ClipboardList, labelKey: 'nav.records' },
   { to: '/app/dashboard/auto-checkin', icon: Radio, labelKey: 'nav.autoCheckin' },
+  { to: '/app/dashboard/b2b', icon: Briefcase, labelKey: 'nav.b2b' },
   { to: '/app/dashboard/config', icon: Settings, labelKey: 'nav.settings' },
 ];
 
@@ -48,8 +49,8 @@ export default function AppShell() {
               to={to}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium no-underline transition-all ${
                 isActive(to, end)
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800 hover:translate-x-1'
               }`}
             >
               <Icon className="w-[18px] h-[18px]" />
@@ -109,8 +110,8 @@ export default function AppShell() {
                 onClick={() => setMobileOpen(false)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium no-underline transition-all ${
                   isActive(to, end)
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-slate-600 hover:bg-slate-50'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'text-slate-600 hover:bg-slate-50 hover:translate-x-1'
                 }`}
               >
                 <Icon className="w-4 h-4" />

@@ -3,102 +3,140 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAdmin() {
-      return request.auth != null && request.auth.token.email == 'r.berlanda04@gmail.com';
-    }
+    // ─── Helpers ────────────────────────────────────────────────
 
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    // Super admin: agora baseado em uma collection em vez de email hardcoded.
+    // Crie o documento /super_admins/{uid} com { ativo: true } para cada super admin.
+    function isAdmin() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/super_admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/super_admins/$(request.auth.uid)).data.ativo == true;
+    }
+
     function isEmpresaAdmin() {
-      return request.auth != null
+      return isAuthenticated()
         && exists(/databases/$(database)/documents/empresa_admins/$(request.auth.uid))
         && get(/databases/$(database)/documents/empresa_admins/$(request.auth.uid)).data.ativo == true;
     }
 
-    // NOTA DE ARQUITETURA:
-    // O kiosk público (/checkin) funciona SEM login, por isso 'funcionarios'
-    // e 'locais' têm leitura pública. O trade-off é que nomes de funcionários
-    // ativos ficam visíveis publicamente (necessário para o kiosk).
-    // Para isolamento total por empresa, o próximo passo é exigir autenticação
-    // (ex.: PIN do funcionário) também no kiosk.
+    function getEmpresaId() {
+      return get(/databases/$(database)/documents/empresa_admins/$(request.auth.uid)).data.empresa_id;
+    }
 
-    // FUNCIONÁRIOS
+    // Verifica se o recurso EXISTENTE pertence à empresa do admin logado.
+    function ownsEmpresaId(empresaIdField) {
+      return isAdmin() || (isEmpresaAdmin() && resource.data[empresaIdField] == getEmpresaId());
+    }
+
+    // Verifica se o recurso NOVO pertence à empresa do admin logado.
+    function requestOwnsEmpresaId(empresaIdField) {
+      return isAdmin() || (isEmpresaAdmin() && request.resource.data[empresaIdField] == getEmpresaId());
+    }
+
+    // Verifica se o usuário autenticado é funcionário da mesma empresa do recurso.
+    function isFuncionarioOfEmpresa() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/funcionarios/$(request.auth.uid))
+        && get(/databases/$(database)/documents/funcionarios/$(request.auth.uid)).data.empresa_id == resource.data.empresa_id;
+    }
+
+    // ─── SUPER ADMINS ──────────────────────────────────────────
+    match /super_admins/{uid} {
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    // ─── FUNCIONÁRIOS ──────────────────────────────────────────
+    // Leitura: super admin (tudo), empresa admin (sua empresa), funcionário (sua empresa).
     match /funcionarios/{funcionarioId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAdmin() || isEmpresaAdmin();
+      allow read: if isAdmin()
+        || (isEmpresaAdmin() && resource.data.empresa_id == getEmpresaId())
+        || (isAuthenticated() && request.auth.uid == funcionarioId);
+      allow create: if isAuthenticated() && requestOwnsEmpresaId('empresa_id');
+      allow update: if ownsEmpresaId('empresa_id');
+      allow delete: if ownsEmpresaId('empresa_id');
     }
 
-    // LOCAIS DE SERVIÇO
+    // ─── LOCAIS DE SERVIÇO ─────────────────────────────────────
+    // Leitura: super admin (tudo), empresa admin (sua empresa), autenticado (para kiosk check-in).
     match /locais/{localId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
-      allow delete: if isAdmin() || isEmpresaAdmin();
+      allow read: if isAdmin()
+        || (isEmpresaAdmin() && resource.data.empresa_id == getEmpresaId())
+        || isAuthenticated();
+      allow create: if isAuthenticated() && requestOwnsEmpresaId('empresa_id');
+      allow update: if ownsEmpresaId('empresa_id');
+      allow delete: if ownsEmpresaId('empresa_id');
     }
 
-    // REGISTROS DE PONTO
-    // - create público: o kiosk /checkin funciona sem login, mas o documento
-    //   precisa ter os campos obrigatórios válidos (anti-spam básico).
-    // - leitura/edição/exclusão apenas para usuários autenticados.
+    // ─── REGISTROS DE PONTO ────────────────────────────────────
+    // Leitura isolada por empresa; criação exige campos obrigatórios + autenticação.
     match /registros/{registroId} {
-      allow read: if isAuthenticated();
-      allow create: if request.resource.data.keys().hasAll(
-          ['id_funcionario', 'id_local', 'tipo', 'data_hora']
-        )
+      allow read: if isAdmin()
+        || (isEmpresaAdmin() && resource.data.empresa_id == getEmpresaId())
+        || (isAuthenticated() && resource.data.id_funcionario == request.auth.uid);
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasAll(
+            ['id_funcionario', 'id_local', 'tipo', 'data_hora', 'empresa_id']
+          )
         && request.resource.data.tipo in ['Check-in', 'Check-out']
         && request.resource.data.id_funcionario is string
         && request.resource.data.id_local is string
-        && request.resource.data.data_hora is string;
-      allow update, delete: if isAdmin() || isEmpresaAdmin();
+        && request.resource.data.data_hora is string
+        && request.resource.data.empresa_id is string;
+      allow update, delete: if ownsEmpresaId('empresa_id');
     }
 
-    // CONFIGURAÇÕES DO SISTEMA — leitura pública (kiosk precisa dos toggles),
-    // escrita apenas para admins.
+    // ─── CONFIGURAÇÕES DO SISTEMA ──────────────────────────────
     match /config/{configId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow write: if isAdmin() || isEmpresaAdmin();
     }
 
-    // SaaS - EMPRESAS (super admin only)
+    // ─── SaaS - EMPRESAS (super admin only) ────────────────────
     match /empresas/{empresaId} {
       allow read, create, update, delete: if isAdmin();
     }
 
-    // SaaS - VENDAS (super admin only)
+    // ─── SaaS - VENDAS (super admin only) ──────────────────────
     match /vendas/{vendaId} {
       allow read, create, update, delete: if isAdmin();
     }
 
-    // SaaS - ACCESS KEYS (super admin only)
+    // ─── SaaS - ACCESS KEYS (super admin only) ─────────────────
     match /access_keys/{keyId} {
       allow read, create, update, delete: if isAdmin();
     }
 
-    // EMPRESA ADMINS (super admin, ou self-create para o fluxo de convite)
-    // list para autenticados: necessário ao fallback de login por e-mail;
-    // expõe apenas e-mails/nomes de admins a usuários logados.
+    // ─── EMPRESA ADMINS ────────────────────────────────────────
     match /empresa_admins/{adminUid} {
       allow get: if isAdmin() || (isAuthenticated() && request.auth.uid == adminUid);
-      allow list: if isAuthenticated();
+      allow list: if isAdmin() || isEmpresaAdmin();
       allow create: if isAdmin() || (isAuthenticated() && request.auth.uid == adminUid);
       allow update: if isAdmin() || (isAuthenticated() && request.auth.uid == adminUid);
       allow delete: if isAdmin();
     }
 
-    // TRABALHADORES AVULSOS (B2C)
+    // ─── TRABALHADORES AVULSOS (B2C) ───────────────────────────
     match /trabalhadores/{trabalhadorId} {
-      allow read: if isAuthenticated() && request.auth.uid == trabalhadorId;
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == trabalhadorId);
       allow create: if isAuthenticated() && request.auth.uid == trabalhadorId;
       allow update: if isAuthenticated() && request.auth.uid == trabalhadorId;
       allow delete: if isAdmin();
     }
 
-    // CONVITES
-    // O ID do documento É o próprio token (48+ caracteres aleatórios seguros).
-    // - get público: quem possui o link/token valida apenas aquele convite.
-    // - list (consultas) somente para admins: impede varredura de todos os convites.
+    // ─── ENTRADAS DE HORÁRIOS DO TRABALHADOR (B2C) ─────────────
+    match /worker_entries/{entryId} {
+      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+
+    // ─── CONVITES ──────────────────────────────────────────────
     match /invitations/{token} {
       allow get: if true;
       allow list: if isAdmin() || isEmpresaAdmin();

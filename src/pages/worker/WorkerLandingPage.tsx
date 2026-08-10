@@ -110,14 +110,14 @@ export default function WorkerLandingPage() {
             </p>
             <div className="flex flex-wrap gap-3 mt-8">
               <button
-                onClick={() => navigate('/login?tab=worker&register=1')}
+                onClick={() => navigate('/login?tab=trabalhador&register=1')}
                 className="bg-gradient-to-r from-amber-600 via-orange-500 to-emerald-600 text-white font-semibold px-6 py-3 rounded-xl text-sm flex items-center gap-2 transition-all shadow-lg shadow-amber-600/25 hover:shadow-xl hover:shadow-amber-600/30 hover:-translate-y-0.5 cursor-pointer border-0"
               >
                 {t('worker.landing.ctaStart')}
                 <ArrowRight className="w-4 h-4" />
               </button>
               <button
-                onClick={() => navigate('/login?tab=worker')}
+                onClick={() => navigate('/login?tab=trabalhador')}
                 className="bg-white text-slate-700 font-semibold px-6 py-3 rounded-xl text-sm border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer"
               >
                 {t('worker.landing.ctaLogin')}
@@ -275,7 +275,7 @@ export default function WorkerLandingPage() {
             {t('worker.landing.ctaSubtitle')}
           </p>
           <button
-            onClick={() => navigate('/login?tab=worker&register=1')}
+            onClick={() => navigate('/login?tab=trabalhador&register=1')}
             className="mt-8 bg-white text-amber-700 font-semibold px-8 py-3.5 rounded-xl text-sm hover:bg-amber-50 hover:-translate-y-0.5 transition-all cursor-pointer border-0 shadow-lg"
           >
             {t('worker.landing.ctaButton')}

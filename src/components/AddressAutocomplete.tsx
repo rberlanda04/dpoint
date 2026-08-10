@@ -66,7 +66,7 @@ export default function AddressAutocomplete({
       setLoading(true);
       try {
         const resp = await fetch(
-          `${NOMINATIM_BASE}/search?format=json&q=${encodeURIComponent(q)}&limit=8&addressdetails=1&countrycodes=br`
+          `${NOMINATIM_BASE}/search?format=json&q=${encodeURIComponent(q)}&limit=8&addressdetails=1`
         );
         const data = await resp.json();
         setSuggestions(data);
@@ -158,7 +158,7 @@ export default function AddressAutocomplete({
         const lng = pos.coords.longitude;
         try {
           const resp = await fetch(
-            `${NOMINATIM_BASE}/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&countrycodes=br`
+            `${NOMINATIM_BASE}/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
           );
           const data = await resp.json();
           const address = data.display_name || '';
@@ -202,7 +202,7 @@ export default function AddressAutocomplete({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 disabled:bg-slate-50"
+          className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all duration-200 disabled:bg-slate-50"
         />
         {value && (
           <button
@@ -216,13 +216,13 @@ export default function AddressAutocomplete({
         <button
           type="button"
           onClick={handleGeolocate}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500 cursor-pointer border-0 bg-transparent"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-500 cursor-pointer border-0 bg-transparent"
           title="Usar minha localização"
         >
           <Crosshair className="w-4 h-4" />
         </button>
         {loading && (
-          <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500 animate-spin" />
+          <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500 animate-spin" />
         )}
       </div>
 
@@ -239,12 +239,12 @@ export default function AddressAutocomplete({
               onMouseEnter={() => setSelectedIndex(index)}
               className={`w-full px-4 py-3 text-left text-sm transition-colors ${
                 index === selectedIndex
-                  ? 'bg-indigo-50 text-indigo-700'
+                  ? 'bg-emerald-50 text-emerald-700'
                   : 'text-slate-700 hover:bg-slate-50'
               }`}
             >
               <div className="flex items-start gap-3">
-                <MapPin className={`w-4 h-4 mt-0.5 shrink-0 ${index === selectedIndex ? 'text-indigo-500' : 'text-slate-400'}`} />
+                <MapPin className={`w-4 h-4 mt-0.5 shrink-0 ${index === selectedIndex ? 'text-emerald-500' : 'text-slate-400'}`} />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{suggestion.display_name}</p>
                   {extractCity(suggestion) && (
@@ -254,7 +254,7 @@ export default function AddressAutocomplete({
                   )}
                 </div>
                 {index === selectedIndex && (
-                  <Check className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
                 )}
               </div>
             </button>

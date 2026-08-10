@@ -29,8 +29,8 @@ export default function LoginPage() {
   const { t } = useI18n();
   
   const [tab, setTab] = useState<'empresa' | 'funcionario' | 'trabalhador'>(
-    searchParams.get('type') === 'worker' ? 'funcionario' :
-    searchParams.get('type') === 'trabalhador' ? 'trabalhador' : 'empresa'
+    searchParams.get('tab') === 'trabalhador' || searchParams.get('type') === 'trabalhador' ? 'trabalhador' :
+    searchParams.get('tab') === 'funcionario' || searchParams.get('type') === 'funcionario' ? 'funcionario' : 'empresa'
   );
   
   const [email, setEmail] = useState('');
@@ -48,7 +48,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user && userRole === 'funcionario') {
-      navigate('/checkin');
+      navigate('/funcionario');
     } else if (user && userRole === 'empresa_admin') {
       navigate('/app/dashboard');
     } else if (user && userRole === 'super_admin') {
@@ -56,6 +56,7 @@ export default function LoginPage() {
     } else if (user && userRole === 'trabalhador_avulso') {
       navigate('/worker');
     }
+    // If userRole is 'none', stay on login page (error already shown)
   }, [user, userRole, navigate]);
 
   if (authLoading) {
@@ -104,7 +105,8 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await loginWithGoogle();
+      // Auto-criar trabalhador apenas se estiver na aba "trabalhador"
+      await loginWithGoogle(tab === 'trabalhador');
     } catch (err: any) {
       setError(mapAuthError(err.message || ''));
     }
@@ -375,7 +377,12 @@ export default function LoginPage() {
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
                 <p className="text-xs text-slate-500 mb-2">Recebeu um convite?</p>
                 <button
-                  onClick={() => navigate('/invite/validar')}
+                  onClick={() => {
+                    const token = prompt('Cole o código do convite:');
+                    if (token && token.trim()) {
+                      navigate(`/invite/${token.trim()}`);
+                    }
+                  }}
                   className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center justify-center gap-1 mx-auto"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />

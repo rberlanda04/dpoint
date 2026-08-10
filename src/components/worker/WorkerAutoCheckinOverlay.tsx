@@ -1,20 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, X, Loader2, MapPin, Clock, AlertTriangle, CheckCircle2, Image } from 'lucide-react';
-import { Button, Card, Badge } from '../components/ui';
-import { useI18n } from '../i18n';
-import { LocalServico } from '../types';
+import { Camera, X, Loader2, MapPin, Clock, AlertTriangle, CheckCircle2, PlayCircle, PauseCircle } from 'lucide-react';
+import { Button, Card } from '../ui';
+import { useI18n } from '../../i18n';
+import { ObraPessoal } from '../../types';
 
-interface AutoCheckinPromptProps {
+interface WorkerAutoCheckinOverlayProps {
   isOpen: boolean;
   onClose: () => void;
-  local: LocalServico | null;
+  obra: ObraPessoal | null;
   eventType: 'enter' | 'exit';
   position: { lat: number; lng: number; accuracy: number };
-  selectedFunc: { id_funcionario: string; nome: string } | null;
-  onConfirm: (data: { observacao: string; photoUrl: string | null; tipo: 'Check-in' | 'Check-out' }) => void;
-  onDismiss: (tipo: 'Check-in' | 'Check-out') => void;
-  requirePhoto?: boolean;
-  requireObservation?: boolean;
+  workerName: string;
+  onConfirm: (data: { observacao: string; photoUrl: string | null; tipo: 'inicio' | 'fim' }) => void;
+  onDismiss: () => void;
 }
 
 function compressImage(file: File, maxWidth = 800, quality = 0.6): Promise<string> {
@@ -45,29 +43,26 @@ function compressImage(file: File, maxWidth = 800, quality = 0.6): Promise<strin
   });
 }
 
-export default function AutoCheckinPrompt({
+export default function WorkerAutoCheckinOverlay({
   isOpen,
   onClose,
-  local,
+  obra,
   eventType,
   position,
-  selectedFunc,
+  workerName,
   onConfirm,
   onDismiss,
-  requirePhoto = false,
-  requireObservation = false,
-}: AutoCheckinPromptProps) {
+}: WorkerAutoCheckinOverlayProps) {
   const { t } = useI18n();
   const [observacao, setObservacao] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const tipo = eventType === 'enter' ? 'Check-in' : 'Check-out';
-  const tipoLabel = eventType === 'enter' ? 'entrada' : 'saída';
   const isCheckout = eventType === 'exit';
+  const tipoSessao = isCheckout ? 'fim' : 'inicio';
   const canDismiss = !isCheckout;
-  const canSubmit = (!requirePhoto || !!photoUrl) && (!requireObservation || observacao.trim().length > 0);
+  const canSubmit = !!photoUrl && observacao.trim().length > 0;
 
   useEffect(() => {
     if (isOpen) {
@@ -78,13 +73,20 @@ export default function AutoCheckinPrompt({
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
 
-  if (!isOpen || !local) return null;
+  useEffect(() => {
+    if (isOpen) {
+      setObservacao('');
+      setPhotoUrl(null);
+    }
+  }, [isOpen]);
+
+  if (!isOpen || !obra) return null;
 
   const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
-        alert('Foto muito grande. Máximo 10MB.');
+        alert(t('checkin.photoTooBig'));
         return;
       }
       const compressed = await compressImage(file, 800, 0.6);
@@ -92,52 +94,27 @@ export default function AutoCheckinPrompt({
     }
   };
 
-  const handleSubmit = (customTipo?: 'Check-in' | 'Check-out') => {
+  const handleSubmit = () => {
+    if (!canSubmit) return;
     setSubmitting(true);
     onConfirm({
       observacao,
       photoUrl,
-      tipo: customTipo || tipo,
+      tipo: tipoSessao,
     });
   };
 
   const handleDismiss = () => {
     if (!canDismiss) return;
-    onDismiss(tipo);
+    onDismiss();
     onClose();
   };
-
-  const getIconForType = () => {
-    if (eventType === 'enter') {
-      return <CheckCircle2 className="w-8 h-8 text-emerald-500" />;
-    }
-    return <Clock className="w-8 h-8 text-slate-500" />;
-  };
-
-  const getGradientForType = () => {
-    if (eventType === 'enter') return 'from-emerald-500 to-emerald-600';
-    return 'from-slate-500 to-slate-600';
-  };
-
-  const handlePhotoInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        alert('Foto muito grande. Máximo 10MB.');
-        return;
-      }
-      const compressed = await compressImage(file, 800, 0.6);
-      setPhotoUrl(compressed);
-    }
-  };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl max-w-md w-full animate-slideUp overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className={`bg-gradient-to-r ${getGradientForType()} px-6 py-5 relative`}>
+        <div className={`bg-gradient-to-r ${isCheckout ? 'from-amber-500 to-orange-500' : 'from-emerald-500 to-teal-500'} px-6 py-5 relative`}>
           <button
             onClick={onClose}
             className="absolute top-3 right-3 p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white cursor-pointer"
@@ -146,14 +123,18 @@ export default function AutoCheckinPrompt({
           </button>
           <div className="flex items-center gap-3 relative z-10">
             <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center">
-              {getIconForType()}
+              {isCheckout ? (
+                <PauseCircle className="w-8 h-8 text-white" />
+              ) : (
+                <PlayCircle className="w-8 h-8 text-white" />
+              )}
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">
-                {eventType === 'enter' ? t('autoCheckin.enterTitle') : t('autoCheckin.exitTitle')}
+                {isCheckout ? t('autoCheckin.exitTitle') : t('autoCheckin.enterTitle')}
               </h2>
               <p className="text-white/90 text-sm">
-                {local.nome_empresa} • {tipoLabel} automática detectada
+                {obra.nome} • {isCheckout ? 'saída' : 'entrada'} automática detectada
               </p>
             </div>
           </div>
@@ -176,8 +157,8 @@ export default function AutoCheckinPrompt({
             <div className="flex items-center gap-3">
               <MapPin className="w-5 h-5 text-indigo-500" />
               <div>
-                <p className="text-sm font-semibold text-slate-800">{local.nome_empresa}</p>
-                <p className="text-xs text-slate-500">{local.cidade}</p>
+                <p className="text-sm font-semibold text-slate-800">{obra.nome}</p>
+                <p className="text-xs text-slate-500">{obra.endereco}</p>
               </div>
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
@@ -185,53 +166,50 @@ export default function AutoCheckinPrompt({
               <span className="text-slate-300">|</span>
               <span className="bg-white px-2 py-0.5 rounded">±{Math.round(position.accuracy)}m</span>
               <span className="text-slate-300">|</span>
-              <span className="bg-white px-2 py-0.5 rounded">{local.raio_auto_checkin}m</span>
+              <span className="bg-white px-2 py-0.5 rounded">{obra.raio_metros}m</span>
             </div>
           </Card>
 
-          {/* Funcionário */}
-          {selectedFunc && (
-            <Card className="bg-indigo-50 border-indigo-200">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
-                  <span className="text-sm font-bold text-indigo-700">
-                    {selectedFunc.nome.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">{selectedFunc.nome}</p>
-                  <p className="text-xs text-slate-500">{t('autoCheckin.funcionarioDetected')}</p>
-                </div>
+          {/* Worker info */}
+          <Card className="bg-indigo-50 border-indigo-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                <span className="text-sm font-bold text-indigo-700">
+                  {workerName.charAt(0).toUpperCase()}
+                </span>
               </div>
-            </Card>
-          )}
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{workerName}</p>
+                <p className="text-xs text-slate-500">{t('autoCheckin.funcionarioDetected')}</p>
+              </div>
+            </div>
+          </Card>
 
           {/* Tipo de ponto */}
           <div className="bg-gradient-to-r from-indigo-50 to-indigo-100 rounded-xl p-4 border border-indigo-200">
             <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${eventType === 'enter' ? 'bg-emerald-100' : 'bg-slate-100'}`}>
-                {eventType === 'enter' ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isCheckout ? 'bg-amber-100' : 'bg-emerald-100'}`}>
+                {isCheckout ? (
+                  <PauseCircle className="w-5 h-5 text-amber-600" />
                 ) : (
-                  <Clock className="w-5 h-5 text-slate-600" />
+                  <PlayCircle className="w-5 h-5 text-emerald-600" />
                 )}
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   {t('autoCheckin.suggestedType')}
                 </p>
-                <p className="text-lg font-bold text-slate-800">{tipo}</p>
+                <p className="text-lg font-bold text-slate-800">{isCheckout ? 'Saída' : 'Entrada'}</p>
               </div>
             </div>
           </div>
 
-          {/* Foto */}
+          {/* Foto - OBRIGATÓRIA */}
           <div>
             <label className="text-xs font-semibold text-slate-600 mb-2 block">
-              {t('autoCheckin.photo')}
-              {requirePhoto && <span className="text-red-500 ml-1">*</span>}
+              {t('autoCheckin.photo')} <span className="text-red-500">*</span>
             </label>
-            <input type="file" accept="image/*" capture="environment" onChange={handlePhotoInput} className="hidden" ref={fileInputRef} />
+            <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" ref={fileInputRef} />
             {photoUrl ? (
               <div className="relative">
                 <img src={photoUrl} alt="Evidência" className="w-full h-40 object-cover rounded-xl border border-slate-200" />
@@ -243,20 +221,20 @@ export default function AutoCheckinPrompt({
               <button onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
                 <Camera className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                 <p className="text-sm font-medium text-slate-600">{t('autoCheckin.addPhoto')}</p>
+                <p className="text-[10px] text-red-500 mt-1">Obrigatório para validação de saída</p>
               </button>
             )}
           </div>
 
-          {/* Observação */}
+          {/* Observação - OBRIGATÓRIA */}
           <div>
             <label className="text-xs font-semibold text-slate-600 mb-1 block">
-              {t('checkin.observation')}
-              {requireObservation && <span className="text-red-500 ml-1">*</span>}
+              {t('checkin.observation')} <span className="text-red-500">*</span>
             </label>
             <textarea
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
-              placeholder={t('autoCheckin.obsPlaceholder')}
+              placeholder="Descreva o que foi feito durante o período..."
               rows={2}
               className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
             />
@@ -267,32 +245,23 @@ export default function AutoCheckinPrompt({
             <Button
               className="w-full"
               size="lg"
-              onClick={() => handleSubmit()}
+              onClick={handleSubmit}
               disabled={submitting || !canSubmit}
             >
               {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : isCheckout ? t('autoCheckin.confirmExit') : t('autoCheckin.confirmEntry')}
             </Button>
 
-            <div className="flex gap-2">
-              {canDismiss && (
-                <Button variant="secondary" className="flex-1" onClick={handleDismiss}>
-                  {t('autoCheckin.skip')}
-                </Button>
-              )}
-              <Button variant="ghost" className={canDismiss ? 'flex-1' : 'w-full'} onClick={() => handleSubmit(eventType === 'enter' ? 'Check-out' : 'Check-in')}>
-                {eventType === 'enter' ? 'Registrar Check-out' : 'Registrar Check-in'}
+            {canDismiss && (
+              <Button variant="secondary" className="w-full" onClick={handleDismiss}>
+                {t('autoCheckin.skip')}
               </Button>
-            </div>
+            )}
 
             {!canSubmit && (
               <p className="text-center text-[10px] text-amber-600 font-medium">
-                {isCheckout ? t('autoCheckin.exitRequiredPhoto') : ''}
+                Foto e observação são obrigatórias para validação de saída.
               </p>
             )}
-
-            <p className="text-center text-[10px] text-slate-500">
-              {isCheckout ? '' : t('autoCheckin.autoFallbackNote')}
-            </p>
           </div>
         </div>
       </div>

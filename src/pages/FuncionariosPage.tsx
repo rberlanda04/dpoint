@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, ToggleLeft, ToggleRight, Users, Copy, CheckCircle, Link as LinkIcon, Trash2 } from 'lucide-react';
-import { Card, Badge, Avatar, SearchInput, Button, EmptyState } from '../components/ui';
+import { Card, Badge, Avatar, SearchInput, Button, EmptyState, Dialog } from '../components/ui';
+import { useToast } from '../components/ui/Toast';
 import PageHeader from '../components/layouts/PageHeader';
 import { dataService } from '../utils/gasClient';
 import { generateSecureToken } from '../utils/crypto';
@@ -19,6 +20,10 @@ export default function FuncionariosPage() {
   const [saving, setSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [newFunc, setNewFunc] = useState({ id: '', nome: '', cargo: '', email: '' });
+  const [deleteTarget, setDeleteTarget] = useState<Funcionario | null>(null);
+  const [revokeToken, setRevokeToken] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
 
   const locale = lang === 'pt' ? 'pt-BR' : 'en-US';
   const empresaId = isSuperAdmin ? undefined : empresaAdmin?.empresa_id || undefined;
@@ -55,7 +60,7 @@ export default function FuncionariosPage() {
 
     const id = newFunc.id.trim().toUpperCase();
     if (funcionarios.some(f => f.id_funcionario.toUpperCase() === id)) {
-      alert(t('func.duplicateId'));
+      toast.warning(t('func.duplicateId'));
       return;
     }
 
@@ -96,11 +101,11 @@ export default function FuncionariosPage() {
         setInvitations(prev => [invitation, ...prev]);
       }
 
+      toast.success(t('func.saveSuccess') || `${newFunc.nome.trim()} cadastrado com sucesso!`);
       setNewFunc({ id: '', nome: '', cargo: '', email: '' });
       setShowAdd(false);
     } catch (err) {
-      console.error('Erro ao cadastrar funcionário:', err);
-      alert(t('func.saveError'));
+      toast.error(t('func.saveError'));
     }
     setSaving(false);
   };
@@ -109,28 +114,33 @@ export default function FuncionariosPage() {
     const next = current === 'Ativo' ? 'Inativo' : 'Ativo';
     setFuncionarios(prev => prev.map(f => f.id_funcionario === id ? { ...f, status: next } : f));
     try {
-      await dataService.toggleFuncionarioStatus(id, next);
+      await dataService.toggleFuncionarioStatus(id, next, empresaId);
     } catch (err) {
       console.error('Erro ao alternar status:', err);
       setFuncionarios(prev => prev.map(f => f.id_funcionario === id ? { ...f, status: current } : f));
     }
   };
 
-  const handleDelete = async (func: Funcionario) => {
-    if (!confirm(t('func.deleteConfirm', { name: func.nome }))) return;
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await dataService.excluirFuncionario(func.id_funcionario);
-      setFuncionarios(prev => prev.filter(f => f.id_funcionario !== func.id_funcionario));
+      await dataService.excluirFuncionario(deleteTarget.id_funcionario, empresaId);
+      setFuncionarios(prev => prev.filter(f => f.id_funcionario !== deleteTarget.id_funcionario));
+      toast.success(`${deleteTarget.nome} removido com sucesso.`);
     } catch (err) {
-      console.error('Erro ao excluir funcionário:', err);
-      alert(t('func.deleteError'));
+      toast.error(t('func.deleteError'));
     }
+    setDeleting(false);
+    setDeleteTarget(null);
   };
 
-  const handleRevokeInvitation = async (token: string) => {
-    if (!confirm(t('func.revokeConfirm'))) return;
-    await dataService.updateInvitation(token, { status: 'expired' });
-    setInvitations(prev => prev.map(i => i.token === token ? { ...i, status: 'expired' } : i));
+  const handleRevokeConfirm = async () => {
+    if (!revokeToken) return;
+    await dataService.updateInvitation(revokeToken, { status: 'expired' });
+    setInvitations(prev => prev.map(i => i.token === revokeToken ? { ...i, status: 'expired' } : i));
+    toast.success(lang === 'pt' ? 'Convite revogado.' : 'Invitation revoked.');
+    setRevokeToken(null);
   };
 
   const copyInviteLink = (token: string) => {
@@ -234,7 +244,7 @@ export default function FuncionariosPage() {
                         {isCopied ? t('common.copied') : t('common.copyLink')}
                       </Button>
                       <button
-                        onClick={() => handleRevokeInvitation(inv.token)}
+                        onClick={() => setRevokeToken(inv.token)}
                         className="text-xs text-red-500 hover:text-red-700 cursor-pointer border-0 bg-transparent font-semibold"
                       >
                         {t('func.revoke')}
@@ -285,7 +295,7 @@ export default function FuncionariosPage() {
                     )}
                   </button>
                   <button
-                    onClick={() => handleDelete(func)}
+                    onClick={() => setDeleteTarget(func)}
                     className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors cursor-pointer border-0 bg-transparent"
                     title={t('common.delete')}
                   >
@@ -297,6 +307,31 @@ export default function FuncionariosPage() {
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteConfirm}
+        title={t('func.deleteConfirmTitle') || 'Excluir funcionário?'}
+        description={deleteTarget ? (t('func.deleteConfirm', { name: deleteTarget.nome }) || `Tem certeza que deseja excluir ${deleteTarget.nome}? Esta ação não pode ser desfeita.`) : ''}
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
+        variant="danger"
+        loading={deleting}
+      />
+
+      {/* Revoke Invitation Dialog */}
+      <Dialog
+        open={!!revokeToken}
+        onClose={() => setRevokeToken(null)}
+        onConfirm={handleRevokeConfirm}
+        title={t('func.revokeConfirmTitle') || 'Revogar convite?'}
+        description={t('func.revokeConfirm') || 'O funcionário não poderá mais usar este link para acessar o sistema.'}
+        confirmLabel={t('func.revoke')}
+        cancelLabel={t('common.cancel')}
+        variant="danger"
+      />
     </div>
   );
 }

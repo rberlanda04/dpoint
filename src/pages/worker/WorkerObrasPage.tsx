@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, MapPin, Pencil, Trash2, Globe, Save, Loader2, X } from 'lucide-react';
+import { Plus, MapPin, Pencil, Trash2, Globe, Save, Loader2, X, Navigation } from 'lucide-react';
 import { Card, Badge, Button, EmptyState, SearchInput } from '../../components/ui';
 import PageHeader from '../../components/layouts/PageHeader';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
@@ -31,6 +31,7 @@ export default function WorkerObrasPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<ObraPessoal | null>(null);
   const [saving, setSaving] = useState(false);
+  const [capturingGps, setCapturingGps] = useState(false);
   const [form, setForm] = useState<FormState>({
     id: '',
     nome: '',
@@ -69,6 +70,30 @@ export default function WorkerObrasPage() {
       endereco: data.address,
       cidade: prev.cidade || data.city,
     }));
+  };
+
+  const handleCaptureGps = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocalização não suportada pelo navegador.');
+      return;
+    }
+    setCapturingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm(prev => ({
+          ...prev,
+          lat: pos.coords.latitude.toString(),
+          lng: pos.coords.longitude.toString(),
+        }));
+        setCapturingGps(false);
+      },
+      (err) => {
+        console.error('Erro ao capturar GPS:', err);
+        alert('Não foi possível obter a localização. Verifique as permissões do navegador.');
+        setCapturingGps(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
   };
 
   const validate = (): { lat: number; lng: number } | null => {
@@ -209,6 +234,19 @@ export default function WorkerObrasPage() {
                 placeholder={t('worker.obras.addressPlaceholder')}
                 className="sm:col-span-2"
               />
+              <button
+                type="button"
+                onClick={handleCaptureGps}
+                disabled={capturingGps}
+                className="sm:col-span-2 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-100 rounded-xl hover:bg-indigo-200 disabled:opacity-50 cursor-pointer border-0"
+              >
+                {capturingGps ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Navigation className="w-4 h-4" />
+                )}
+                {capturingGps ? 'Obtendo localização...' : 'Usar minha localização atual'}
+              </button>
               <input
                 type="text"
                 placeholder={t('worker.obras.addressPlaceholder')}

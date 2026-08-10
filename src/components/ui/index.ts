@@ -6,3 +6,5 @@ export { default as Avatar } from './Avatar';
 export { default as SearchInput } from './SearchInput';
 export { default as EmptyState } from './EmptyState';
 export { default as Toggle } from './Toggle';
+export { default as Dialog } from './Dialog';
+export { ToastProvider, useToast } from './Toast';

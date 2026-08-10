@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Globe, Database, Shield, AlertTriangle, Languages, Loader2 } from 'lucide-react';
-import { Card, Badge, Button, Toggle } from '../components/ui';
+import { Card, Badge, Button, Toggle, Dialog } from '../components/ui';
+import { useToast } from '../components/ui/Toast';
 import PageHeader from '../components/layouts/PageHeader';
 import { dataService } from '../utils/gasClient';
 import { useI18n, Language } from '../i18n';
+import { useAuth } from '../hooks/useAuth';
 import { SystemConfig } from '../types';
 
 export default function ConfigPage() {
   const { t, lang, setLang } = useI18n();
+  const toast = useToast();
+  const { empresaAdmin, isSuperAdmin } = useAuth();
+  const empresaId = isSuperAdmin ? undefined : empresaAdmin?.empresa_id || undefined;
   const [config, setConfig] = useState<SystemConfig>({
     id: 'app_config',
     use_geolocation: true,
@@ -20,6 +25,7 @@ export default function ConfigPage() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
+  const [showClearDialog, setShowClearDialog] = useState(false);
 
   useEffect(() => {
     dataService.loadConfig().then(c => {
@@ -30,19 +36,20 @@ export default function ConfigPage() {
 
   const handleSave = async () => {
     await dataService.saveConfig(config);
+    toast.success(t('config.saved'));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const handleClearRecords = async () => {
-    if (!confirm(t('config.clearConfirm'))) return;
     setClearing(true);
     try {
-      await dataService.clearAllRegistros();
-      alert(t('config.clearDone'));
+      await dataService.clearAllRegistros(empresaId);
+      toast.success(t('config.clearDone'));
+      setShowClearDialog(false);
     } catch (err) {
       console.error('Erro ao limpar registros:', err);
-      alert(t('config.clearError'));
+      toast.error(t('config.clearError'));
     }
     setClearing(false);
   };
@@ -63,7 +70,7 @@ export default function ConfigPage() {
         {/* Language */}
         <Card>
           <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
-            <Languages className="w-4 h-4 text-indigo-500" />
+            <Languages className="w-4 h-4 text-emerald-500" />
             {t('config.language')}
           </h3>
           <div className="flex items-center justify-between py-2">
@@ -77,7 +84,7 @@ export default function ConfigPage() {
                   key={l}
                   onClick={() => setLang(l)}
                   className={`px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer border-0 transition-all ${
-                    lang === l ? 'bg-white text-indigo-600 shadow-sm' : 'bg-transparent text-slate-500'
+                    lang === l ? 'bg-white text-emerald-600 shadow-sm' : 'bg-transparent text-slate-500'
                   }`}
                 >
                   {l === 'pt' ? 'Português' : 'English'}
@@ -90,7 +97,7 @@ export default function ConfigPage() {
         {/* Data Source */}
         <Card>
           <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
-            <Database className="w-4 h-4 text-indigo-500" />
+            <Database className="w-4 h-4 text-emerald-500" />
             {t('config.dataSource')}
           </h3>
           <div className="space-y-4">
@@ -111,7 +118,7 @@ export default function ConfigPage() {
                 placeholder="https://script.google.com/macros/..."
                 value={config.gas_web_app_url}
                 onChange={(e) => setConfig({ ...config, gas_web_app_url: e.target.value })}
-                className="w-72 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                className="w-72 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               />
             </div>
           </div>
@@ -172,18 +179,29 @@ export default function ConfigPage() {
           </div>
         </Card>
 
-        {/* Danger Zone */}
         <Card className="border-red-100 bg-red-50/30">
           <h3 className="text-sm font-semibold text-red-700 mb-2 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
             {t('config.dangerZone')}
           </h3>
           <p className="text-xs text-red-600/70 mb-3">{t('config.dangerDesc')}</p>
-          <Button variant="danger" size="sm" onClick={handleClearRecords} disabled={clearing}>
+          <Button variant="danger" size="sm" onClick={() => setShowClearDialog(true)} disabled={clearing}>
             {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : t('config.clearRecords')}
           </Button>
         </Card>
       </div>
+
+      <Dialog
+        isOpen={showClearDialog}
+        onClose={() => setShowClearDialog(false)}
+        title={t('config.clearConfirm')}
+        description={t('config.dangerDesc')}
+        confirmText={t('common.confirm')}
+        cancelText={t('common.cancel')}
+        onConfirm={handleClearRecords}
+        variant="danger"
+        isLoading={clearing}
+      />
     </div>
   );
 }

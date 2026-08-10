@@ -14,6 +14,7 @@ interface UseGeofenceMonitorOptions {
   registros: RegistroPonto[];
   enabled: boolean;
   onGeofenceEvent: (event: GeofenceEvent) => void;
+  onNotification?: (title: string, body: string, tag: string) => void;
   minIntervalMs?: number; // intervalo mínimo entre eventos do mesmo local
 }
 
@@ -22,6 +23,7 @@ export function useGeofenceMonitor({
   registros,
   enabled,
   onGeofenceEvent,
+  onNotification,
   minIntervalMs = 5 * 60 * 1000, // 5 min entre eventos do mesmo local
 }: UseGeofenceMonitorOptions) {
   const watchIdRef = useRef<number | null>(null);
@@ -47,7 +49,7 @@ export function useGeofenceMonitor({
         local.latitude, local.longitude
       );
 
-      const isInside = distance <= radius;
+      const isInside = distance <= radius + position.accuracy;
       const lastEventTime = lastEventRef.current.get(local.id_local) || 0;
 
       // Evita eventos duplicados no intervalo mínimo
@@ -75,6 +77,13 @@ export function useGeofenceMonitor({
           position,
           timestamp: new Date().toISOString(),
         });
+        if (onNotification) {
+          onNotification(
+            '📍 Entrada detectada',
+            `${local.nome_empresa} — ${local.cidade}`,
+            `geofence-enter-${local.id_local}`
+          );
+        }
       } else if (!isInside && prevInside) {
         // SAIU do geofence
         lastEventRef.current.set(local.id_local, now);
@@ -85,6 +94,13 @@ export function useGeofenceMonitor({
           position,
           timestamp: new Date().toISOString(),
         });
+        if (onNotification) {
+          onNotification(
+            '📍 Saída detectada',
+            `${local.nome_empresa} — ${local.cidade}`,
+            `geofence-exit-${local.id_local}`
+          );
+        }
       }
     });
 
@@ -94,13 +110,13 @@ export function useGeofenceMonitor({
         local,
         distance: haversineDistance(position.lat, position.lng, local.latitude, local.longitude),
       }))
-      .filter(d => d.distance <= (d.local.raio_auto_checkin! * 2))
+      .filter(d => d.distance <= (d.local.raio_auto_checkin! + position.accuracy) * 1.5)
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 5)
       .map(d => d.local);
     
     setNearbyLocais(nearby);
-  }, [autoLocais, minIntervalMs, onGeofenceEvent]);
+  }, [autoLocais, minIntervalMs, onGeofenceEvent, onNotification]);
 
   useEffect(() => {
     if (!enabled || !navigator.geolocation) {

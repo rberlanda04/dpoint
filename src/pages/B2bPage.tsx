@@ -34,7 +34,7 @@ import Logo from '../components/Logo';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import { useAuth } from '../hooks/useAuth';
 import { useI18n } from '../i18n';
-import { RegistroPonto, LocalServico, Funcionario } from '../types';
+import { RegistroPonto, LocalServico, Funcionario, EmpresaAdmin } from '../types';
 import { dataService } from '../utils/gasClient';
 
 // Import images
@@ -81,6 +81,7 @@ export default function B2bPage() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareEmail, setShareEmail] = useState('');
   const [activeTab, setActiveTab] = useState<'empresas' | 'horas'>('empresas');
+  const [empresaAdmins, setEmpresaAdmins] = useState<EmpresaAdmin[]>([]);
 
   const locale = lang === 'pt' ? 'pt-BR' : 'en-US';
 
@@ -98,6 +99,11 @@ export default function B2bPage() {
       setLocais(locs);
     }, empresaId);
 
+    // Load empresa admins to resolve company names
+    dataService.loadEmpresaAdmins().then(admins => {
+      setEmpresaAdmins(admins);
+    });
+
     return () => { unsubRegistros(); unsubFuncionarios(); unsubLocais(); };
   }, [empresaId]);
 
@@ -107,9 +113,12 @@ export default function B2bPage() {
       funcionarios.forEach(f => {
         const eid = f.empresa_id || '';
         if (!empresasMap.has(eid)) {
+          // Resolve company name from empresa_admins
+          const admin = empresaAdmins.find(a => a.empresa_id === eid);
+          const nomeEmpresa = admin?.nome_empresa || eid || 'Sem empresa';
           empresasMap.set(eid, {
             id: eid,
-            nome: f.empresa_id ? f.empresa_id : 'Sem empresa',
+            nome: nomeEmpresa,
             empresa_id: f.empresa_id || '',
             cnpj: '',
             email: f.email || '',
