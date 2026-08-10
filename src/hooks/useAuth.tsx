@@ -86,53 +86,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Fallback: email-based lookup in empresa_admins
-      const adminEmailQuery = query(
-        collection(db, 'empresa_admins'),
-        where('email', '==', firebaseUser.email)
-      );
-      const adminSnap = await getDocs(adminEmailQuery);
-      if (!adminSnap.empty) {
-        const adminData = adminSnap.docs[0].data() as EmpresaAdmin;
-        if (adminData.ativo) {
-          setEmpresaAdmin(adminData);
-          return 'empresa_admin';
-        } else {
-          setAccessError(t('auth.accountDisabled'));
-          await signOut(auth);
-          return 'none';
+      try {
+        const adminEmailQuery = query(
+          collection(db, 'empresa_admins'),
+          where('email', '==', firebaseUser.email)
+        );
+        const adminSnap = await getDocs(adminEmailQuery);
+        if (!adminSnap.empty) {
+          const adminData = adminSnap.docs[0].data() as EmpresaAdmin;
+          if (adminData.ativo) {
+            setEmpresaAdmin(adminData);
+            return 'empresa_admin';
+          } else {
+            setAccessError(t('auth.accountDisabled'));
+            await signOut(auth);
+            return 'none';
+          }
         }
+      } catch {
+        // Permission denied for empresa_admins list — continue
       }
 
       // Check funcionarios collection
-      const userQuery = query(
-        collection(db, 'funcionarios'),
-        where('email', '==', firebaseUser.email)
-      );
-      const userSnap = await getDocs(userQuery);
-      if (!userSnap.empty) {
-        // Check if user also exists as B2C worker — if so, prioritize worker role
-        const trabalhadorDoc = await getDoc(doc(db, 'trabalhadores', firebaseUser.uid));
-        if (trabalhadorDoc.exists()) {
-          return 'trabalhador_avulso';
+      try {
+        const userQuery = query(
+          collection(db, 'funcionarios'),
+          where('email', '==', firebaseUser.email)
+        );
+        const userSnap = await getDocs(userQuery);
+        if (!userSnap.empty) {
+          // Check if user also exists as B2C worker — if so, prioritize worker role
+          const trabalhadorDoc = await getDoc(doc(db, 'trabalhadores', firebaseUser.uid));
+          if (trabalhadorDoc.exists()) {
+            return 'trabalhador_avulso';
+          }
+          const funcData = userSnap.docs[0].data();
+          if (funcData.status === 'Ativo') {
+            return 'funcionario';
+          } else {
+            setAccessError(t('auth.registrationDisabled'));
+            await signOut(auth);
+            return 'none';
+          }
         }
-        const funcData = userSnap.docs[0].data();
-        if (funcData.status === 'Ativo') {
-          return 'funcionario';
-        } else {
-          setAccessError(t('auth.registrationDisabled'));
-          await signOut(auth);
-          return 'none';
-        }
+      } catch {
+        // Permission denied for funcionarios list — continue
       }
 
       // Check trabalhadores collection (B2C workers)
-      const trabalhadorQuery = query(
-        collection(db, 'trabalhadores'),
-        where('email', '==', firebaseUser.email)
-      );
-      const trabalhadorSnap = await getDocs(trabalhadorQuery);
-      if (!trabalhadorSnap.empty) {
-        return 'trabalhador_avulso';
+      try {
+        const trabalhadorQuery = query(
+          collection(db, 'trabalhadores'),
+          where('email', '==', firebaseUser.email)
+        );
+        const trabalhadorSnap = await getDocs(trabalhadorQuery);
+        if (!trabalhadorSnap.empty) {
+          return 'trabalhador_avulso';
+        }
+      } catch {
+        // Permission denied for trabalhadores list — continue
       }
 
       // Check for pending invitation — auto-create empresa_admins.
@@ -180,9 +192,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return 'funcionario';
           }
         }
-      } catch (inviteError) {
+      } catch {
         // Sem permissão para listar convites (esperado para não-admins)
-        console.warn('Consulta de convites ignorada (permissão):', inviteError);
       }
 
       // Se não encontrou em nenhuma coleção, NÃO cria automaticamente
