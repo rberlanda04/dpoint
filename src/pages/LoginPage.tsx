@@ -96,7 +96,12 @@ export default function LoginPage() {
     try {
       await login(email, password);
     } catch (err: any) {
-      setError(mapAuthError(err.message || ''));
+      const msg = err.message || '';
+      if (tab === 'trabalhador' && (msg.includes('auth/user-not-found') || msg.includes('auth/invalid-credential') || msg.includes('auth/wrong-password'))) {
+        navigate('/register');
+        return;
+      }
+      setError(mapAuthError(msg));
     }
     setLoading(false);
   };
