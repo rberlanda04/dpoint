@@ -144,7 +144,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 5. Check trabalhadores collection (B2C workers) — by UID
     try {
-      const trabalhadorDoc = await getDoc(doc(db, 'trabalhadores', firebaseUser.uid));
+      let trabalhadorDoc = await getDoc(doc(db, 'trabalhadores', firebaseUser.uid));
+      if (!trabalhadorDoc.exists()) {
+        await new Promise(r => setTimeout(r, 1500));
+        trabalhadorDoc = await getDoc(doc(db, 'trabalhadores', firebaseUser.uid));
+      }
       console.log(`[Auth] Step 5: trabalhadores UID exists=${trabalhadorDoc.exists()}`);
       if (trabalhadorDoc.exists()) {
         return 'trabalhador_avulso';

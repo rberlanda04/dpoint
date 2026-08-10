@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Loader2, AlertCircle, CheckCircle, Building2, User, Eye, EyeOff, Lock, Mail } from 'lucide-react';
-import { createUserWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, updateDoc, query, collection, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../utils/firebase';
 import { dataService } from '../utils/gasClient';
@@ -130,15 +130,25 @@ export default function InvitePage() {
     setError('');
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, invitation.email, password);
-      const firebaseUid = userCredential.user.uid;
+      let firebaseUid: string;
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, invitation.email, password);
+        firebaseUid = userCredential.user.uid;
+      } catch (createErr: any) {
+        if (createErr.code === 'auth/email-already-in-use') {
+          const signInCred = await signInWithEmailAndPassword(auth, invitation.email, password);
+          firebaseUid = signInCred.user.uid;
+        } else {
+          throw createErr;
+        }
+      }
 
       await acceptInviteWithUid(firebaseUid);
     } catch (err: any) {
       console.error('Erro ao criar conta:', err);
       const msg = err.message || t('invite.errCreate');
-      if (msg.includes('auth/email-already-in-use')) {
-        setError(t('invite.errInUse'));
+      if (msg.includes('auth/wrong-password') || msg.includes('auth/invalid-credential')) {
+        setError('Esta email já possui conta. Faça login primeiro e depois acesse o link do convite novamente.');
       } else if (msg.includes('auth/weak-password')) {
         setError(t('invite.errWeak'));
       } else {
