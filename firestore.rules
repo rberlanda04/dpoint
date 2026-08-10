@@ -57,7 +57,7 @@ service cloud.firestore {
     match /funcionarios/{funcionarioId} {
       allow read: if isAdmin()
         || (isEmpresaAdmin() && resource.data.empresa_id == getEmpresaId())
-        || (isAuthenticated() && request.auth.uid == funcionarioId);
+        || isAuthenticated();
       allow list: if isAuthenticated();
       allow create: if isAuthenticated() && requestOwnsEmpresaId('empresa_id');
       allow update: if ownsEmpresaId('empresa_id');

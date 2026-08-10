@@ -102,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         where('email', '==', firebaseUser.email)
       );
       const adminSnap = await getDocs(adminEmailQuery);
+      console.log(`[Auth] Step 3: empresa_admins email query empty=${adminSnap.empty}`);
       if (!adminSnap.empty) {
         const adminData = adminSnap.docs[0].data() as EmpresaAdmin;
         if (adminData.ativo) {
@@ -113,8 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return 'none';
         }
       }
-    } catch {
-      // Permission denied for empresa_admins list — continue
+    } catch (e) {
+      console.warn('[Auth] Step 3: empresa_admins email query error:', e);
     }
 
     // 4. Check funcionarios collection
@@ -124,12 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         where('email', '==', firebaseUser.email)
       );
       const userSnap = await getDocs(userQuery);
+      console.log(`[Auth] Step 4: funcionarios email query empty=${userSnap.empty}, count=${userSnap.size}`);
       if (!userSnap.empty) {
         const trabalhadorDoc = await getDoc(doc(db, 'trabalhadores', firebaseUser.uid));
         if (trabalhadorDoc.exists()) {
           return 'trabalhador_avulso';
         }
         const funcData = userSnap.docs[0].data();
+        console.log(`[Auth] Step 4: funcionario status=${funcData.status}`);
         if (funcData.status === 'Ativo') {
           return 'funcionario';
         } else {
@@ -138,8 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return 'none';
         }
       }
-    } catch {
-      // Permission denied for funcionarios list — continue
+    } catch (e) {
+      console.warn('[Auth] Step 4: funcionarios email query error:', e);
     }
 
     // 5. Check trabalhadores collection (B2C workers) — by UID
