@@ -249,17 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const registerWorker = async (email: string, password: string, name: string) => {
-    setAccessError(null);
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    // Create worker profile in Firestore
-    await setDoc(doc(db, 'trabalhadores', userCredential.user.uid), {
-      uid: userCredential.user.uid,
-      email: email,
-      nome: name,
-      tipo: 'independente', // B2C worker
-      data_criacao: new Date().toISOString().split('T')[0],
-      status: 'Ativo',
-    });
+    throw new Error('Self-registration is disabled. Contact your company to get access.');
   };
 
   const loginWithGoogle = async (autoCreateWorker = false) => {

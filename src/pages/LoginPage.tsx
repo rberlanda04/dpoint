@@ -179,8 +179,8 @@ export default function LoginPage() {
             { icon: Share2, text: 'Compartilhamento' },
             { icon: Clock, text: 'Registro fácil' },
           ],
-          infoTitle: 'Cadastro gratuito',
-          infoText: 'Crie sua conta gratuitamente para gerenciar seus horários de trabalho e projetar seus ganhos.',
+          infoTitle: 'Acesso via empresa',
+          infoText: 'Seu acesso deve ser criado por uma empresa parceira. Faça login com suas credenciais.',
           infoColor: 'emerald',
           buttonGradient: 'from-emerald-600 to-emerald-700',
         };
@@ -301,9 +301,10 @@ export default function LoginPage() {
               </div>
             )}
 
+            {/* Trabalhador: Login only - no self-registration */}
             {tab === 'trabalhador' && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs text-emerald-700">
-                <strong>Trabalhador:</strong> Cadastre-se gratuitamente para gerenciar seus horários e projetar ganhos.
+                <strong>Trabalhador:</strong> Faça login com sua conta. Seu acesso deve ser criado por uma empresa parceira.
               </div>
             )}
 
@@ -391,18 +392,10 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Trabalhador: Link para cadastro */}
+            {/* Trabalhador: login only */}
             {tab === 'trabalhador' && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-                <p className="text-xs text-emerald-600 mb-2">Não tem conta?</p>
-                <button
-                  onClick={() => navigate('/register')}
-                  className="text-sm font-semibold text-emerald-700 hover:text-emerald-800 flex items-center justify-center gap-1 mx-auto"
-                >
-                  <Wallet className="w-4 h-4" />
-                  Criar conta grátis
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                <p className="text-xs text-emerald-600">Seu acesso é gerenciado pela empresa que contratou seus serviços.</p>
               </div>
             )}
 

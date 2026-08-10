@@ -11,7 +11,6 @@ import PortalLayout from './components/layouts/PortalLayout';
 
 // Auth (keep static — entry points)
 import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
 import LandingPage from './pages/LandingPage';
 
 // Code-split all dashboard/portal/worker pages with React.lazy
@@ -109,7 +108,7 @@ export default function App() {
               {/* Public Routes */}
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/register" element={<Navigate to="/login" replace />} />
               <Route path="/invite/:token" element={<LazyPage><InvitePage /></LazyPage>} />
               <Route path="/checkin" element={<LazyPage><CheckInPage /></LazyPage>} />
 

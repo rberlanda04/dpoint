@@ -483,17 +483,11 @@ export default function WorkerPortalPage() {
       {/* Guest Mode Light Banner */}
       {!user && (
         <div className="bg-gradient-to-r from-indigo-50 via-emerald-50 to-teal-50 border-b border-indigo-100 px-4 py-2.5">
-          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+          <div className="max-w-6xl mx-auto flex items-center justify-center gap-2 text-xs">
             <div className="flex items-center gap-2 text-indigo-900">
               <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
               <span><strong>Modo Visitante:</strong> Você está testando o Work Tracker! Seus turnos ficam salvos neste dispositivo.</span>
             </div>
-            <button
-              onClick={() => navigate('/register')}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer border-0 shadow-xs whitespace-nowrap"
-            >
-              Criar Conta em 1-Clique para Salvar na Nuvem →
-            </button>
           </div>
         </div>
       )}

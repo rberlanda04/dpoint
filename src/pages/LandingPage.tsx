@@ -145,12 +145,6 @@ export default function LandingPage() {
             >
               Entrar
             </button>
-            <button
-              onClick={() => navigate('/register')}
-              className="text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 px-4 py-2 rounded-xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer border-0"
-            >
-              Criar Conta Grátis
-            </button>
           </div>
         </div>
       </nav>
