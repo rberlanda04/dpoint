@@ -66,6 +66,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (superAdminDoc.exists() && superAdminDoc.data().ativo === true) {
         return 'super_admin';
       }
+      // Auto-provision: if no super_admins doc exists for this user, check config/super_admin_emails
+      if (!superAdminDoc.exists() && firebaseUser.email) {
+        try {
+          const configRef = doc(db, 'config', 'super_admin_emails');
+          const configDoc = await getDoc(configRef);
+          if (configDoc.exists()) {
+            const emails: string[] = configDoc.data().emails || [];
+            if (emails.includes(firebaseUser.email)) {
+              await setDoc(doc(db, 'super_admins', firebaseUser.uid), {
+                email: firebaseUser.email,
+                ativo: true,
+                data_criacao: new Date().toISOString().split('T')[0],
+              });
+              return 'super_admin';
+            }
+          } else {
+            // Bootstrap: no config exists — create it with this user as first super admin
+            await setDoc(configRef, { emails: [firebaseUser.email] });
+            await setDoc(doc(db, 'super_admins', firebaseUser.uid), {
+              email: firebaseUser.email,
+              ativo: true,
+              data_criacao: new Date().toISOString().split('T')[0],
+            });
+            return 'super_admin';
+          }
+        } catch {
+          // Config doc might not exist yet or permission denied
+        }
+      }
     } catch {
       // Permission denied means user is not a super admin — continue
     }

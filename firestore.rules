@@ -47,7 +47,9 @@ service cloud.firestore {
     // ─── SUPER ADMINS ──────────────────────────────────────────
     match /super_admins/{uid} {
       allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
-      allow write: if isAdmin();
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+      allow update: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
+      allow delete: if isAdmin();
     }
 
     // ─── FUNCIONÁRIOS ──────────────────────────────────────────
@@ -93,7 +95,8 @@ service cloud.firestore {
     // ─── CONFIGURAÇÕES DO SISTEMA ──────────────────────────────
     match /config/{configId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() || isEmpresaAdmin();
+      allow create: if isAuthenticated() && !exists(/databases/$(database)/documents/config/$(configId));
+      allow update, delete: if isAdmin() || isEmpresaAdmin();
     }
 
     // ─── SaaS - EMPRESAS (super admin only) ────────────────────
