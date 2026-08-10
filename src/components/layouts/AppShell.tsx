@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n';
 import { TranslationKey } from '../../i18n/pt';
 import Logo from '../Logo';
 import LanguageSwitcher from '../LanguageSwitcher';
+import PwaInstallBanner from '../PwaInstallBanner';
 
 const NAV_ITEMS: { to: string; icon: any; labelKey: TranslationKey; end?: boolean }[] = [
   { to: '/app/dashboard', icon: Home, labelKey: 'nav.overview', end: true },
@@ -136,6 +137,9 @@ export default function AppShell() {
         <div className="lg:hidden h-14" />
         <Outlet />
       </main>
+
+      {/* PWA Install Banner */}
+      <PwaInstallBanner />
     </div>
   );
 }

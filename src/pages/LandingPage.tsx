@@ -133,7 +133,7 @@ export default function LandingPage() {
             {isInstallable && (
               <button
                 onClick={promptInstall}
-                className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-xl transition-all cursor-pointer border border-emerald-200"
+                className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-xl transition-all cursor-pointer border border-emerald-200"
               >
                 <Download className="w-3.5 h-3.5" />
                 Instalar App

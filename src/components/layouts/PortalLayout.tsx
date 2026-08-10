@@ -6,6 +6,7 @@ import { useI18n } from '../../i18n';
 import { TranslationKey } from '../../i18n/pt';
 import Logo from '../Logo';
 import LanguageSwitcher from '../LanguageSwitcher';
+import PwaInstallBanner from '../PwaInstallBanner';
 
 const PORTAL_NAV: { to: string; icon: any; labelKey: TranslationKey }[] = [
   { to: '/portal/empresas', icon: Building2, labelKey: 'nav.companies' },
@@ -130,6 +131,9 @@ export default function PortalLayout() {
         <div className="lg:hidden h-14" />
         <Outlet />
       </main>
+
+      {/* PWA Install Banner */}
+      <PwaInstallBanner />
     </div>
   );
 }
