@@ -64,10 +64,10 @@ export class DataService {
    * possa reagir (ex.: mensagem de falha em vez de dados vazios silenciosos).
    * @param empresaId filtra por empresa (multi-tenant). Omitir = visão global/kiosk.
    */
-  public async loadAllData(empresaId?: string, useCacheOnError: boolean = true, userId?: string): Promise<AppDatabase> {
+  public async loadAllData(empresaId?: string, useCacheOnError: boolean = true): Promise<AppDatabase> {
     if (this.config.mode === 'firebase') {
       try {
-        const firestoreData = await firebaseService.loadAllData(empresaId, userId);
+        const firestoreData = await firebaseService.loadAllData(empresaId);
         // Só usa o Firestore como cache local quando não há filtro de tenant,
         // para não misturar dados de empresas diferentes no cache.
         if (!empresaId) {

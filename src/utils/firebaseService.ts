@@ -29,10 +29,9 @@ export class FirebaseService {
    * @param empresaId quando informado, filtra os dados pela empresa (multi-tenant).
    *                  Registros legados sem empresa_id não são retornados nesse modo.
    */
-  public async loadAllData(empresaId?: string, userId?: string): Promise<AppDatabase> {
+  public async loadAllData(empresaId?: string): Promise<AppDatabase> {
     try {
       const tenantFilter: QueryConstraint[] = empresaId ? [where('empresa_id', '==', empresaId)] : [];
-      const userFilter: QueryConstraint[] = userId ? [where('id_funcionario', '==', userId)] : [];
 
       const funcsSnap = await getDocs(query(collection(db, 'funcionarios'), ...tenantFilter));
       const funcionarios: Funcionario[] = [];
@@ -65,7 +64,7 @@ export class FirebaseService {
       });
 
       const registrosSnap = await getDocs(
-        query(collection(db, 'registros'), ...tenantFilter, ...userFilter, orderBy('data_hora', 'desc'))
+        query(collection(db, 'registros'), ...tenantFilter, orderBy('data_hora', 'desc'))
       );
       const registros: RegistroPonto[] = [];
       registrosSnap.forEach((docSnap) => {

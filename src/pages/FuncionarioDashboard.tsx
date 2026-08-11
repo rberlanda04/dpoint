@@ -19,14 +19,12 @@ export default function FuncionarioDashboard() {
       if (!user?.email) return;
       
       const normalizedEmail = user.email.trim().toLowerCase();
-      const db = await dataService.loadAllData(undefined, true, user.uid);
+      const db = await dataService.loadAllData();
       
-      // Try to find by email first
       let loggedFunc = db.funcionarios.find((f: any) => 
         f.email && f.email.trim().toLowerCase() === normalizedEmail
       );
       
-      // Fallback: find by uid field (set during invite acceptance)
       if (!loggedFunc) {
         loggedFunc = db.funcionarios.find((f: any) => 
           (f as any).uid === user.uid

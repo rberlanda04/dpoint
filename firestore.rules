@@ -101,7 +101,8 @@ service cloud.firestore {
     match /registros/{registroId} {
       allow read: if isAdmin()
         || (isEmpresaAdmin() && resource.data.empresa_id == getEmpresaId())
-        || (isAuthenticated() && resource.data.id_funcionario == request.auth.uid);
+        || isAuthenticated();
+      allow list: if isAuthenticated();
       allow create: if isAuthenticated()
         && request.resource.data.keys().hasAll(
             ['id_funcionario', 'id_local', 'tipo', 'data_hora', 'empresa_id']
