@@ -458,6 +458,10 @@ const pt = {
   'autoCheckin.notifExitTitle': '📍 Saída detectada',
   'autoCheckin.notifEnterBody': 'Entrada em {local} registrada.',
   'autoCheckin.notifExitBody': 'Saída de {local} detectada. Valide com foto e observação.',
+  'autoCheckin.gpsDenied': 'Acesso ao GPS negado',
+  'autoCheckin.gpsDeniedHelp': 'Permita o acesso à localização nas configurações do navegador para usar o auto check-in.',
+  'autoCheckin.gpsUnavailable': 'GPS indisponível. Verifique se o GPS está ativado no dispositivo.',
+  'autoCheckin.howToEnable': 'Como habilitar',
 
   // ===== Portal Trabalhador =====
   'workerPortal.title': 'Portal do Trabalhador',

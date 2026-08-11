@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { MapPin, Play, Square, User, Bell, BellOff, Navigation, CheckCircle2, Loader2 } from 'lucide-react';
+import { MapPin, Play, Square, User, Bell, BellOff, Navigation, CheckCircle2, Loader2, AlertTriangle, Settings } from 'lucide-react';
 import { Card, Badge, Button, EmptyState } from '../components/ui';
 import PageHeader from '../components/layouts/PageHeader';
 import AutoCheckinPrompt from '../components/AutoCheckinPrompt';
@@ -7,6 +7,7 @@ import { dataService } from '../utils/gasClient';
 import { useAuth } from '../hooks/useAuth';
 import { useI18n } from '../i18n';
 import { useGeofenceMonitor } from '../hooks/useGeofenceMonitor';
+import { useGpsPermission } from '../hooks/useGpsPermission';
 import { haversineDistance } from '../utils/geo';
 import { Funcionario, LocalServico, RegistroPonto } from '../types';
 
@@ -23,6 +24,22 @@ export default function AutoCheckinPage() {
   const [lastEvent, setLastEvent] = useState<{ type: string; local: string; time: string } | null>(null);
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptEvent, setPromptEvent] = useState<{ local: LocalServico; eventType: 'enter' | 'exit'; position: { lat: number; lng: number; accuracy: number } } | null>(null);
+
+  const gps = useGpsPermission();
+
+  const handleToggleMonitoring = async () => {
+    if (monitoring) {
+      setMonitoring(false);
+      gps.stopWatching();
+      return;
+    }
+    if (gps.permissionState !== 'granted') {
+      const ok = await gps.requestPermission();
+      if (!ok) return;
+    }
+    gps.watchPosition();
+    setMonitoring(true);
+  };
 
   const empresaId = isSuperAdmin ? undefined : empresaAdmin?.empresa_id || undefined;
   const selectedFunc = funcionarios.find(f => f.id_funcionario === selectedFuncId) || null;
@@ -66,13 +83,16 @@ export default function AutoCheckinPage() {
     setPromptOpen(true);
   }, [selectedFunc, sendNotification, t]);
 
-  const { isMonitoring, currentPosition, nearbyLocais } = useGeofenceMonitor({
+  const { nearbyLocais } = useGeofenceMonitor({
     locais,
     registros,
     enabled: monitoring && !!selectedFunc,
+    currentPosition: gps.currentPosition,
     onGeofenceEvent: handleGeofenceEvent,
     onNotification: sendNotification,
   });
+
+  const isMonitoring = monitoring && !!gps.currentPosition;
 
   const handlePromptConfirm = useCallback(async (data: { observacao: string; photoUrl: string | null; tipo: 'Check-in' | 'Check-out' }) => {
     if (!promptEvent || !selectedFunc) return;
@@ -207,6 +227,40 @@ export default function AutoCheckinPage() {
         </Card>
       )}
 
+      {gps.permissionState === 'denied' && (
+        <Card className="border-red-200 bg-red-50/50">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-700">{t('autoCheckin.gpsDenied')}</p>
+              <p className="text-xs text-red-600 mt-1">{t('autoCheckin.gpsDeniedHelp')}</p>
+            </div>
+            <Button size="sm" variant="secondary" onClick={() => window.open('https://support.google.com/chrome/answer/142065', '_blank')}>
+              <Settings className="w-3.5 h-3.5 mr-1" />
+              {t('autoCheckin.howToEnable')}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {gps.permissionState === 'unavailable' && (
+        <Card className="border-red-200 bg-red-50/50">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+            <p className="text-sm text-red-700">{t('autoCheckin.gpsUnavailable')}</p>
+          </div>
+        </Card>
+      )}
+
+      {gps.error && gps.permissionState !== 'denied' && gps.permissionState !== 'unavailable' && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+            <p className="text-sm text-amber-700">{gps.error}</p>
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -220,15 +274,28 @@ export default function AutoCheckinPage() {
                 {isMonitoring ? t('autoCheckin.active') : t('autoCheckin.inactive')}
               </span>
             </div>
-            <Button size="sm" variant={isMonitoring ? 'secondary' : 'primary'} onClick={() => setMonitoring(m => !m)} disabled={!selectedFunc}>
-              {isMonitoring ? <><Square className="w-3.5 h-3.5 mr-1" />{t('autoCheckin.stop')}</> : <><Play className="w-3.5 h-3.5 mr-1" />{t('autoCheckin.start')}</>}
+            <Button
+              size="sm"
+              variant={isMonitoring ? 'secondary' : 'primary'}
+              onClick={handleToggleMonitoring}
+              disabled={!selectedFunc || gps.loading}
+            >
+              {gps.loading ? (
+                <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+              ) : isMonitoring ? (
+                <Square className="w-3.5 h-3.5 mr-1" />
+              ) : (
+                <Play className="w-3.5 h-3.5 mr-1" />
+              )}
+              {isMonitoring ? t('autoCheckin.stop') : t('autoCheckin.start')}
             </Button>
           </div>
 
-          {currentPosition && (
+          {(gps.currentPosition) && (
             <div className="text-xs text-slate-500 font-mono bg-slate-50 rounded-lg px-3 py-2">
               <Navigation className="w-3 h-3 inline mr-1" />
-              {currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}
+              {(gps.currentPosition)!.lat.toFixed(6)}, {(gps.currentPosition)!.lng.toFixed(6)}
+              {gps.currentPosition && <span className="text-slate-400 ml-2">±{Math.round(gps.currentPosition.accuracy)}m</span>}
             </div>
           )}
 
@@ -249,8 +316,8 @@ export default function AutoCheckinPage() {
           <div className="space-y-2">
             {autoLocais.map(local => {
               const isNearby = nearbyLocais.some(n => n.id_local === local.id_local);
-              const distance = currentPosition
-                ? Math.round(haversineDistance(currentPosition.lat, currentPosition.lng, local.latitude, local.longitude))
+              const distance = gps.currentPosition
+                ? Math.round(haversineDistance(gps.currentPosition.lat, gps.currentPosition.lng, local.latitude, local.longitude))
                 : null;
               return (
                 <div key={local.id_local} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isNearby ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}>

@@ -460,6 +460,10 @@ const en: Record<TranslationKey, string> = {
   'autoCheckin.notifExitTitle': '📍 Exit detected',
   'autoCheckin.notifEnterBody': 'Entry at {local} registered.',
   'autoCheckin.notifExitBody': 'Exit from {local} detected. Validate with photo and observation.',
+  'autoCheckin.gpsDenied': 'GPS access denied',
+  'autoCheckin.gpsDeniedHelp': 'Allow location access in browser settings to use auto check-in.',
+  'autoCheckin.gpsUnavailable': 'GPS unavailable. Check if GPS is enabled on the device.',
+  'autoCheckin.howToEnable': 'How to enable',
 
   // ===== Worker Portal =====
   'workerPortal.title': 'Worker Portal',
