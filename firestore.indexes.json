@@ -7,6 +7,14 @@
         { "fieldPath": "empresa_id", "order": "ASCENDING" },
         { "fieldPath": "data_hora", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "registros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "id_funcionario", "order": "ASCENDING" },
+        { "fieldPath": "data_hora", "order": "DESCENDING" }
+      ]
     }
   ]
 }

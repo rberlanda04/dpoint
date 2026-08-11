@@ -19,7 +19,7 @@ export default function FuncionarioDashboard() {
       if (!user?.email) return;
       
       const normalizedEmail = user.email.trim().toLowerCase();
-      const db = await dataService.loadAllData();
+      const db = await dataService.loadAllData(undefined, true, user.uid);
       
       // Try to find by email first
       let loggedFunc = db.funcionarios.find((f: any) => 
