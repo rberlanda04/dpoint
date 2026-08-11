@@ -17,20 +17,24 @@ interface AddressSuggestion {
     municipality?: string;
     state?: string;
     country?: string;
+    country_code?: string;
     road?: string;
     house_number?: string;
     neighbourhood?: string;
     suburb?: string;
+    district?: string;
+    hamlet?: string;
   };
 }
 
 interface AddressAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
-  onSelect: (data: { lat: number; lng: number; address: string; city: string; boundingbox?: string[] }) => void;
+  onSelect: (data: { lat: number; lng: number; address: string; city: string; state?: string; country?: string; boundingbox?: string[] }) => void;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  countrycodes?: string;
 }
 
 function debounce<T extends (...args: any[]) => any>(fn: T, ms: number): T {
@@ -47,7 +51,8 @@ export default function AddressAutocomplete({
   onSelect, 
   placeholder = 'Buscar endereço...', 
   className = '',
-  disabled = false 
+  disabled = false,
+  countrycodes 
 }: AddressAutocompleteProps) {
   const { t } = useI18n();
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
@@ -65,9 +70,14 @@ export default function AddressAutocomplete({
       }
       setLoading(true);
       try {
-        const resp = await fetch(
-          `${NOMINATIM_BASE}/search?format=json&q=${encodeURIComponent(q)}&limit=8&addressdetails=1`
-        );
+        const params = new URLSearchParams({
+          format: 'json',
+          q,
+          limit: '8',
+          addressdetails: '1',
+        });
+        if (countrycodes) params.set('countrycodes', countrycodes);
+        const resp = await fetch(`${NOMINATIM_BASE}/search?${params.toString()}`);
         const data = await resp.json();
         setSuggestions(data);
       } catch {
@@ -76,7 +86,7 @@ export default function AddressAutocomplete({
         setLoading(false);
       }
     }, 250),
-    []
+    [countrycodes]
   );
 
   useEffect(() => {
@@ -116,14 +126,10 @@ export default function AddressAutocomplete({
     const lat = parseFloat(suggestion.lat);
     const lng = parseFloat(suggestion.lon);
     const address = suggestion.display_name;
-    const city = suggestion.address?.city || 
-                 suggestion.address?.town || 
-                 suggestion.address?.village || 
-                 suggestion.address?.municipality || 
-                 suggestion.address?.suburb || 
-                 suggestion.address?.neighbourhood || 
-                 '';
-    onSelect({ lat, lng, address, city, boundingbox: suggestion.boundingbox });
+    const city = extractCity(suggestion);
+    const state = extractState(suggestion);
+    const country = extractCountry(suggestion);
+    onSelect({ lat, lng, address, city, state, country, boundingbox: suggestion.boundingbox });
     onChange(address);
     setShowDropdown(false);
     setSelectedIndex(-1);
@@ -162,11 +168,13 @@ export default function AddressAutocomplete({
           );
           const data = await resp.json();
           const address = data.display_name || '';
-          const city = data.address?.city || data.address?.town || data.address?.village || data.address?.municipality || data.address?.suburb || data.address?.neighbourhood || '';
-          onSelect({ lat, lng, address, city, boundingbox: data.boundingbox });
+          const city = data.address?.city || data.address?.town || data.address?.village || data.address?.municipality || data.address?.suburb || data.address?.district || data.address?.hamlet || data.address?.neighbourhood || '';
+          const state = data.address?.state || '';
+          const country = data.address?.country || '';
+          onSelect({ lat, lng, address, city, state, country, boundingbox: data.boundingbox });
           onChange(address);
         } catch {
-          onSelect({ lat, lng, address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, city: '' });
+          onSelect({ lat, lng, address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, city: '', state: '', country: '' });
           onChange(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
         }
         setLoading(false);
@@ -185,8 +193,18 @@ export default function AddressAutocomplete({
            addr.address?.village || 
            addr.address?.municipality || 
            addr.address?.suburb || 
+           addr.address?.district ||
+           addr.address?.hamlet ||
            addr.address?.neighbourhood || 
            '';
+  };
+
+  const extractState = (addr: AddressSuggestion): string => {
+    return addr.address?.state || '';
+  };
+
+  const extractCountry = (addr: AddressSuggestion): string => {
+    return addr.address?.country || '';
   };
 
   return (

@@ -20,6 +20,8 @@ export interface LocalServico {
   empresa_id?: string;
   nome_empresa: string;
   cidade: string;
+  estado?: string;
+  pais?: string;
   latitude: number;
   longitude: number;
   raio_metros: number;
@@ -141,6 +143,9 @@ export interface ObraPessoal {
   trabalhador_id: string;
   nome: string;            // ex: "Obra Residencial - Rua das Flores"
   endereco: string;
+  cidade?: string;
+  estado?: string;
+  pais?: string;
   latitude: number;
   longitude: number;
   raio_metros: number;

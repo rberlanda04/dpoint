@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ObraPessoal, SessaoTrabalho } from '../types';
 import { haversineDistance } from '../utils/geo';
 
@@ -32,7 +32,7 @@ export function useGeofenceWorker({
   const [currentPosition, setCurrentPosition] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [nearbyObras, setNearbyObras] = useState<ObraPessoal[]>([]);
 
-  const autoObras = obras.filter(o => o.ativa && o.raio_metros > 0);
+  const autoObras = useMemo(() => obras.filter(o => o.ativa && o.raio_metros > 0), [obras]);
 
   const getLastSessionToday = useCallback((obraId: string) => {
     const today = new Date().toISOString().split('T')[0];

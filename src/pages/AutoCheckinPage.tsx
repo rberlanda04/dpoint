@@ -50,9 +50,12 @@ export default function AutoCheckinPage() {
       setLocais(db.locais);
       setRegistros(db.registros);
       setLoading(false);
+    }).catch(err => {
+      console.error('Erro ao carregar dados:', err);
+      setLoading(false);
     });
     if ('Notification' in window) setNotifPermission(Notification.permission);
-  }, []);
+  }, [empresaId]);
 
   const requestNotifPermission = async () => {
     if ('Notification' in window) {
@@ -73,15 +76,11 @@ export default function AutoCheckinPage() {
     if (!selectedFunc) return;
     const { local, eventType, position } = event;
 
-    // Send native notification
-    const title = eventType === 'enter' ? t('autoCheckin.notifEnterTitle') : t('autoCheckin.notifExitTitle');
-    const body = `${selectedFunc.nome} — ${local.nome_empresa}`;
-    sendNotification(title, body, `geofence-${local.id_local}`);
-
+    // Notification already sent by useGeofenceMonitor via onNotification
     // Open prompt for user confirmation
     setPromptEvent({ local, eventType, position });
     setPromptOpen(true);
-  }, [selectedFunc, sendNotification, t]);
+  }, [selectedFunc, t]);
 
   const { nearbyLocais } = useGeofenceMonitor({
     locais,

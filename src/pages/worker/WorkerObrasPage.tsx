@@ -15,6 +15,8 @@ interface FormState {
   nome: string;
   endereco: string;
   cidade: string;
+  estado: string;
+  pais: string;
   lat: string;
   lng: string;
   raio: string;
@@ -37,6 +39,8 @@ export default function WorkerObrasPage() {
     nome: '',
     endereco: '',
     cidade: '',
+    estado: '',
+    pais: '',
     lat: '',
     lng: '',
     raio: '100',
@@ -51,7 +55,9 @@ export default function WorkerObrasPage() {
         id: editing.id,
         nome: editing.nome,
         endereco: editing.endereco,
-        cidade: editing.cidade,
+        cidade: editing.cidade || '',
+        estado: editing.estado || '',
+        pais: editing.pais || '',
         lat: editing.latitude.toString(),
         lng: editing.longitude.toString(),
         raio: editing.raio_metros.toString(),
@@ -62,13 +68,15 @@ export default function WorkerObrasPage() {
     }
   }, [editing]);
 
-  const handleAddressSelect = (data: { lat: number; lng: number; address: string; city: string }) => {
+  const handleAddressSelect = (data: { lat: number; lng: number; address: string; city: string; state?: string; country?: string }) => {
     setForm(prev => ({
       ...prev,
       lat: data.lat.toString(),
       lng: data.lng.toString(),
       endereco: data.address,
       cidade: prev.cidade || data.city,
+      estado: prev.estado || data.state || '',
+      pais: prev.pais || data.country || '',
     }));
   };
 
@@ -110,6 +118,8 @@ export default function WorkerObrasPage() {
       nome: '',
       endereco: '',
       cidade: '',
+      estado: '',
+      pais: '',
       lat: '',
       lng: '',
       raio: '100',
@@ -133,6 +143,9 @@ export default function WorkerObrasPage() {
         trabalhador_id: trabalhador.id,
         nome: form.nome,
         endereco: form.endereco,
+        cidade: form.cidade || undefined,
+        estado: form.estado || undefined,
+        pais: form.pais || undefined,
         latitude: coords.lat,
         longitude: coords.lng,
         raio_metros: parseInt(form.raio) || 100,

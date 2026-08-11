@@ -5,6 +5,8 @@ import { Card, Button, EmptyState } from '../components/ui';
 import { useAuth } from '../hooks/useAuth';
 import { dataService } from '../utils/gasClient';
 import { RegistroPonto, Funcionario } from '../types';
+import { db } from '../utils/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function FuncionarioDashboard() {
   const navigate = useNavigate();
@@ -19,21 +21,36 @@ export default function FuncionarioDashboard() {
       if (!user?.email) return;
       
       const normalizedEmail = user.email.trim().toLowerCase();
-      const db = await dataService.loadAllData();
       
-      let loggedFunc = db.funcionarios.find((f: any) => 
+      // First, find the employee record to get empresa_id for filtering
+      let empresaId: string | undefined;
+      const emailQuery = query(collection(db, 'funcionarios'), where('email', '==', normalizedEmail));
+      const emailSnap = await getDocs(emailQuery);
+      if (!emailSnap.empty) {
+        empresaId = emailSnap.docs[0].data().empresa_id;
+      } else {
+        const uidQuery = query(collection(db, 'funcionarios'), where('uid', '==', user.uid));
+        const uidSnap = await getDocs(uidQuery);
+        if (!uidSnap.empty) {
+          empresaId = uidSnap.docs[0].data().empresa_id;
+        }
+      }
+      
+      const db_data = await dataService.loadAllData(empresaId);
+      
+      let loggedFunc = db_data.funcionarios.find((f: any) => 
         f.email && f.email.trim().toLowerCase() === normalizedEmail
       );
       
       if (!loggedFunc) {
-        loggedFunc = db.funcionarios.find((f: any) => 
+        loggedFunc = db_data.funcionarios.find((f: any) => 
           (f as any).uid === user.uid
         );
       }
       
       if (loggedFunc) {
         setFuncionario(loggedFunc);
-        const myRecords = db.registros.filter((r: any) => r.id_funcionario === loggedFunc!.id_funcionario);
+        const myRecords = db_data.registros.filter((r: any) => r.id_funcionario === loggedFunc!.id_funcionario);
         setRegistros(myRecords);
       }
       setLoading(false);

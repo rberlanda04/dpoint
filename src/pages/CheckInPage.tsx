@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { MapPin, QrCode, Camera, CheckCircle2, AlertTriangle, Loader2, ArrowLeft, ScanLine, LogOut } from 'lucide-react';
+import { MapPin, QrCode, Camera, CheckCircle2, AlertTriangle, Loader2, ArrowLeft, ScanLine, LogOut, X } from 'lucide-react';
 import { Button, Card, Badge, EmptyState } from '../components/ui';
 import QRCodeScanner from '../components/QRCodeScanner';
 import LanguageSwitcher from '../components/LanguageSwitcher';
@@ -76,65 +76,115 @@ export default function CheckInPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [config, setConfig] = useState<SystemConfig>({ mode: 'firebase' });
   const [pairWarning, setPairWarning] = useState('');
+  const [activeCheckIn, setActiveCheckIn] = useState<RegistroPonto | null>(null);
+
+  const autoDetectEmployee = useCallback((funcionariosList: Funcionario[], registrosList: RegistroPonto[]) => {
+    if (!user?.email) return;
+    const normalizedEmail = user.email.trim().toLowerCase();
+    const loggedFunc = funcionariosList.find((f: any) =>
+      f.email && f.email.trim().toLowerCase() === normalizedEmail
+    ) || funcionariosList.find((f: any) => (f as any).uid === user.uid);
+    if (loggedFunc) {
+      setSelectedFunc(loggedFunc);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const funcRecords = registrosList
+        .filter((r: any) => r.data_hora && r.id_funcionario === loggedFunc.id_funcionario && r.data_hora.startsWith(todayStr))
+        .sort((a: any, b: any) => a.data_hora.localeCompare(b.data_hora));
+      if (funcRecords.length > 0) {
+        const last = funcRecords[funcRecords.length - 1];
+        setTipo(last.tipo === 'Check-in' ? 'Check-out' : 'Check-in');
+        if (last.tipo === 'Check-in') {
+          setActiveCheckIn(last);
+        }
+      } else {
+        setTipo('Check-in');
+      }
+    }
+  }, [user]);
+
+  const autoSelectLocal = useCallback((locaisList: LocalServico[]) => {
+    const localParam = searchParams.get('local');
+    const latParam = searchParams.get('lat');
+    const lngParam = searchParams.get('lng');
+    const raioParam = searchParams.get('raio');
+    if (localParam) {
+      const found = locaisList.find((l: LocalServico) => l.id_local === localParam.toUpperCase());
+      if (found) {
+        setSelectedLocal(found);
+        setStep('location');
+      } else if (latParam && lngParam) {
+        const tempLocal: LocalServico = {
+          id_local: localParam.toUpperCase(),
+          nome_empresa: localParam.toUpperCase(),
+          cidade: '',
+          latitude: parseFloat(latParam),
+          longitude: parseFloat(lngParam),
+          raio_metros: raioParam ? parseInt(raioParam) : 100,
+        };
+        setSelectedLocal(tempLocal);
+        setStep('location');
+      }
+    }
+  }, [searchParams]);
 
   useEffect(() => {
-    Promise.all([
-      dataService.loadAllData(),
-      dataService.loadConfig(),
-    ]).then(([db, cfg]) => {
-      setFuncionarios(db.funcionarios.filter((f: any) => f.status === 'Ativo'));
-      setLocais(db.locais);
-      setRegistros(db.registros);
+    const empresaIdParam = searchParams.get('empresa_id') || undefined;
+    
+    dataService.loadConfig().then(cfg => {
       setConfig(cfg);
-      setLoading(false);
-
-      // Auto-detect logged-in employee if user is authenticated
-      if (user?.email) {
-        const loggedFunc = db.funcionarios.find((f: any) => f.email === user.email);
-        if (loggedFunc) {
-          setSelectedFunc(loggedFunc);
-          
-          // Helper is defined later, so we find the last record manually here
-          const todayStr = new Date().toISOString().split('T')[0];
-          const funcRecords = db.registros
-            .filter((r: any) => r.data_hora && r.id_funcionario === loggedFunc.id_funcionario && r.data_hora.startsWith(todayStr))
-            .sort((a: any, b: any) => a.data_hora.localeCompare(b.data_hora));
-            
-          if (funcRecords.length > 0) {
-            const last = funcRecords[funcRecords.length - 1];
-            setTipo(last.tipo === 'Check-in' ? 'Check-out' : 'Check-in');
-          } else {
-            setTipo('Check-in');
-          }
+    });
+    
+    async function resolveEmpresaId(): Promise<string | undefined> {
+      if (empresaIdParam) return empresaIdParam;
+      if (user?.email || user?.uid) {
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
+        const { db } = await import('../utils/firebase');
+        const normalizedEmail = user.email?.trim().toLowerCase() || '';
+        if (normalizedEmail) {
+          const emailQuery = query(collection(db, 'funcionarios'), where('email', '==', normalizedEmail));
+          const emailSnap = await getDocs(emailQuery);
+          if (!emailSnap.empty) return emailSnap.docs[0].data().empresa_id;
+        }
+        if (user.uid) {
+          const uidQuery = query(collection(db, 'funcionarios'), where('uid', '==', user.uid));
+          const uidSnap = await getDocs(uidQuery);
+          if (!uidSnap.empty) return uidSnap.docs[0].data().empresa_id;
         }
       }
+      return undefined;
+    }
 
-      const localParam = searchParams.get('local');
-      const latParam = searchParams.get('lat');
-      const lngParam = searchParams.get('lng');
-      const raioParam = searchParams.get('raio');
-      if (localParam) {
-        const found = db.locais.find((l: LocalServico) => l.id_local === localParam.toUpperCase());
-        if (found) {
-          setSelectedLocal(found);
-          setStep('location');
-        } else if (latParam && lngParam) {
-          const tempLocal: LocalServico = {
-            id_local: localParam.toUpperCase(),
-            nome_empresa: localParam.toUpperCase(),
-            cidade: '',
-            latitude: parseFloat(latParam),
-            longitude: parseFloat(lngParam),
-            raio_metros: raioParam ? parseInt(raioParam) : 100,
-          };
-          setSelectedLocal(tempLocal);
-          setStep('location');
-        }
+    resolveEmpresaId().then(resolvedEmpresaId => {
+      if (resolvedEmpresaId) {
+        dataService.loadAllData(resolvedEmpresaId).then(db => {
+          setFuncionarios(db.funcionarios.filter((f: any) => f.status === 'Ativo'));
+          setLocais(db.locais);
+          setRegistros(db.registros);
+          setLoading(false);
+          autoDetectEmployee(db.funcionarios, db.registros);
+          autoSelectLocal(db.locais);
+        });
+      } else {
+        setLocais([]);
+        setLoading(false);
       }
     });
 
     handleGetLocation();
   }, [user]);
+
+  // When selectedLocal changes and we don't have employees yet (non-QR flow), load them filtered by empresa_id
+  useEffect(() => {
+    if (!selectedLocal) return;
+    const localEmpresaId = (selectedLocal as any).empresa_id;
+    if (!localEmpresaId) return;
+    if (funcionarios.length > 0) return;
+    dataService.loadAllData(localEmpresaId).then(db => {
+      setFuncionarios(db.funcionarios.filter((f: any) => f.status === 'Ativo'));
+      setRegistros(db.registros);
+      autoDetectEmployee(db.funcionarios, db.registros);
+    });
+  }, [selectedLocal]);
 
   const handleGetLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -336,6 +386,11 @@ export default function CheckInPage() {
 
       await dataService.registrarPonto(registro);
       setRegistros(prev => [registro, ...prev]);
+      if (tipo === 'Check-in') {
+        setActiveCheckIn(registro);
+      } else {
+        setActiveCheckIn(null);
+      }
       setStep('success');
     } catch (error) {
       console.error('Falha ao registrar ponto:', error);
@@ -347,7 +402,6 @@ export default function CheckInPage() {
 
   const handleReset = () => {
     setStep('scan');
-    setSelectedFunc(null);
     setSelectedLocal(null);
     setPhotoUrl(null);
     setObservacao('');
@@ -355,9 +409,59 @@ export default function CheckInPage() {
     setPairWarning('');
     setSubmitError('');
     setTipo('Check-in');
+    setSelectedFunc(null);
   };
 
-  const filteredLocais = locais.filter(l =>
+  const handleQuickCheckOut = async () => {
+    if (!activeCheckIn || !geoPosition || !selectedFunc) return;
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const local = locais.find(l => l.id_local === activeCheckIn.id_local);
+      const idRegistro = generateId('REG');
+
+      let fotoFinal: string | undefined;
+      if (photoUrl) {
+        fotoFinal = await uploadPhotoEvidence(photoUrl, idRegistro);
+      }
+
+      const registro: RegistroPonto = {
+        id_registro: idRegistro,
+        id_funcionario: selectedFunc.id_funcionario,
+        id_local: activeCheckIn.id_local,
+        empresa_id: activeCheckIn.empresa_id || '',
+        tipo: 'Check-out',
+        data_hora: new Date().toISOString(),
+        latitude_registro: geoPosition.lat,
+        longitude_registro: geoPosition.lng,
+        precisao_gps: Math.round(geoPosition.accuracy),
+        observacao,
+        nome_funcionario: selectedFunc.nome,
+        nome_local: local?.nome_empresa || activeCheckIn.nome_local || '',
+        dentro_geofence: isWithinGeofence(),
+        tipo_verificacao: 'GPS',
+        foto_url: fotoFinal,
+      };
+      await dataService.registrarPonto(registro);
+      setRegistros(prev => [registro, ...prev]);
+      setActiveCheckIn(null);
+      setTipo('Check-in');
+      setPhotoUrl(null);
+      setObservacao('');
+      setStep('success');
+    } catch (error) {
+      console.error('Falha ao registrar check-out:', error);
+      setSubmitError(t('checkin.saveError'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+
+  const filteredLocais = (activeCheckIn
+    ? locais.filter(l => l.empresa_id === activeCheckIn.empresa_id)
+    : locais
+  ).filter(l =>
     l.nome_empresa.toLowerCase().includes(searchLocal.toLowerCase()) ||
     l.id_local.toLowerCase().includes(searchLocal.toLowerCase())
   );
@@ -373,6 +477,18 @@ export default function CheckInPage() {
         <div className="text-center space-y-3">
           <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
           <p className="text-sm text-slate-500">{t('common.loading')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!loading && locais.length === 0 && !selectedLocal) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center space-y-3 max-w-sm px-4">
+          <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
+          <h2 className="text-lg font-bold text-slate-800">{t('checkin.noSiteFound')}</h2>
+          <p className="text-sm text-slate-500">{user ? 'Nenhum local encontrado para sua empresa. Faça login novamente.' : 'Escaneie o QR Code de uma obra ou faça login para acessar.'}</p>
         </div>
       </div>
     );
@@ -440,10 +556,100 @@ export default function CheckInPage() {
 
       {/* Content */}
       <div className="px-4 pb-24">
+        {/* Quick Checkout Confirmation */}
+        {step === 'location' && tipo === 'Check-out' && activeCheckIn && selectedLocal && selectedLocal.id_local === activeCheckIn.id_local && (
+          <div className="space-y-4 mb-4">
+            <Card className="border-emerald-200 bg-emerald-50/50">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <LogOut className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">Check-out</p>
+                    <p className="text-xs text-slate-500">{selectedLocal.nome_empresa}</p>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl p-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Entrada</span>
+                    <span className="font-mono text-slate-700">{new Date(activeCheckIn.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Saida</span>
+                    <span className="font-mono text-slate-700">{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  {geoPosition && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">GPS</span>
+                      <Badge variant={isWithinGeofence() ? 'success' : 'warning'}>
+                        {isWithinGeofence() ? t('checkin.inside') : t('checkin.outside')}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+
+                {/* Photo */}
+                {config.use_camera_photo !== false && (
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">{t('checkin.photo')}</label>
+                    {photoUrl ? (
+                      <div className="relative">
+                        <img src={photoUrl} alt="Foto" className="w-full h-32 object-cover rounded-xl" />
+                        <button
+                          onClick={() => setPhotoUrl(null)}
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs cursor-pointer border-0"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full border-2 border-dashed border-slate-200 rounded-xl py-6 text-center hover:border-emerald-300 hover:bg-emerald-50/30 transition-all cursor-pointer bg-transparent"
+                      >
+                        <Camera className="w-6 h-6 text-slate-400 mx-auto mb-1" />
+                        <p className="text-xs text-slate-500">{t('checkin.takePhoto')}</p>
+                      </button>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhoto}
+                      className="hidden"
+                    />
+                  </div>
+                )}
+
+                {/* Observation */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1 block">{t('checkin.observation')}</label>
+                  <textarea
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    placeholder={t('checkin.obsPlaceholder')}
+                    rows={2}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="secondary" className="flex-1" onClick={() => { setSelectedLocal(null); setPhotoUrl(null); setObservacao(''); setStep('scan'); }}>Cancelar</Button>
+                  <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={handleQuickCheckOut} disabled={submitting || !geoPosition}>
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar Check-out'}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
         {/* Step: Select Location */}
         {step === 'scan' && (
           <div className="space-y-4">
-            <h2 className="text-base font-bold text-slate-800">{t('checkin.selectSite')}</h2>
+            <h2 className="text-base font-bold text-slate-800">{activeCheckIn ? 'Trocar de Obra' : t('checkin.selectSite')}</h2>
 
             {/* QR Code Actions */}
             <Card>
@@ -503,7 +709,7 @@ export default function CheckInPage() {
         )}
 
         {/* Step: Location + Employee */}
-        {step === 'location' && (
+        {step === 'location' && !(tipo === 'Check-out' && activeCheckIn && selectedLocal && selectedLocal.id_local === activeCheckIn.id_local) && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -774,7 +980,7 @@ export default function CheckInPage() {
 
         {/* Step: Success */}
         {step === 'success' && (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4 px-4">
             <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center animate-pulseGlow">
               <CheckCircle2 className="w-10 h-10 text-emerald-500" />
             </div>
@@ -790,7 +996,17 @@ export default function CheckInPage() {
                 <p className="text-xs text-amber-600 mt-2">{t('checkin.outsideNote')}</p>
               )}
             </div>
-            <Button onClick={handleReset} className="mt-4">{t('checkin.newRecord')}</Button>
+            <div className="flex gap-2 w-full max-w-xs mt-4">
+              <Button onClick={() => {
+                if (activeCheckIn) {
+                  setSelectedLocal(locais.find(l => l.id_local === activeCheckIn.id_local) || null);
+                  setTipo('Check-out');
+                  setStep('location');
+                } else {
+                  handleReset();
+                }
+              }} className="flex-1">{t('checkin.newRecord')}</Button>
+            </div>
           </div>
         )}
       </div>

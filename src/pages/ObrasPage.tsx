@@ -48,7 +48,7 @@ export default function ObrasPage() {
   const generateId = () => `LOC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
   const [newLocal, setNewLocal] = useState({
-    id: generateId(), empresa: '', cidade: '', lat: '', lng: '', raio: '100', raioAuto: '100', address: '', numero: '', raioAutoCalculated: false
+    id: generateId(), empresa: '', cidade: '', estado: '', pais: '', lat: '', lng: '', raio: '100', raioAuto: '100', address: '', numero: '', raioAutoCalculated: false
   });
   const [copiedAutoLink, setCopiedAutoLink] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LocalServico | null>(null);
@@ -72,10 +72,10 @@ export default function ObrasPage() {
   );
 
   const resetForm = () => {
-    setNewLocal({ id: generateId(), empresa: '', cidade: '', lat: '', lng: '', raio: '100', raioAuto: '100', address: '', numero: '', raioAutoCalculated: false });
+    setNewLocal({ id: generateId(), empresa: '', cidade: '', estado: '', pais: '', lat: '', lng: '', raio: '100', raioAuto: '100', address: '', numero: '', raioAutoCalculated: false });
   };
 
-  const handleAddressSelect = (data: { lat: number; lng: number; address: string; city: string; boundingbox?: string[] }) => {
+  const handleAddressSelect = (data: { lat: number; lng: number; address: string; city: string; state?: string; country?: string; boundingbox?: string[] }) => {
     const autoRadius = calculateRadiusFromBbox(data.boundingbox);
     const shortName = data.address.split(',')[0].trim();
     setNewLocal(prev => ({
@@ -84,6 +84,8 @@ export default function ObrasPage() {
       lng: data.lng.toString(),
       address: data.address,
       cidade: data.city || prev.cidade,
+      estado: data.state || prev.estado,
+      pais: data.country || prev.pais,
       empresa: prev.empresa || shortName,
       raio: autoRadius.toString(),
       raioAuto: autoRadius.toString(),
@@ -124,7 +126,8 @@ export default function ObrasPage() {
     try {
       // Pega só o nome da rua (primeira parte antes da vírgula)
       const street = newLocal.address.split(',')[0].trim();
-      const query = `${street}, ${num}, ${newLocal.cidade}`;
+      const statePart = newLocal.estado ? `, ${newLocal.estado}` : '';
+      const query = `${street}, ${num}, ${newLocal.cidade}${statePart}`;
       const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
       const data = await resp.json();
       
@@ -164,6 +167,8 @@ export default function ObrasPage() {
         id_local: newLocal.id.toUpperCase(),
         nome_empresa: newLocal.empresa,
         cidade: newLocal.cidade,
+        estado: newLocal.estado || undefined,
+        pais: newLocal.pais || undefined,
         latitude: coords.lat,
         longitude: coords.lng,
         raio_metros: parseInt(newLocal.raio) || 100,
@@ -196,6 +201,8 @@ export default function ObrasPage() {
         ...editing,
         nome_empresa: newLocal.empresa,
         cidade: newLocal.cidade,
+        estado: newLocal.estado || undefined,
+        pais: newLocal.pais || undefined,
         latitude: coords.lat,
         longitude: coords.lng,
         raio_metros: parseInt(newLocal.raio) || 100,
@@ -229,11 +236,14 @@ export default function ObrasPage() {
       id: local.id_local,
       empresa: local.nome_empresa,
       cidade: local.cidade,
+      estado: local.estado || '',
+      pais: local.pais || '',
       lat: local.latitude.toString(),
       lng: local.longitude.toString(),
       raio: local.raio_metros.toString(),
       raioAuto: (local.raio_auto_checkin || local.raio_metros).toString(),
       address: '',
+      numero: '',
       raioAutoCalculated: false,
     });
     setEditing(local);
@@ -242,11 +252,11 @@ export default function ObrasPage() {
   };
 
   const qrUrl = qrLocal
-    ? `${window.location.origin}/checkin?local=${qrLocal.id_local}&lat=${qrLocal.latitude}&lng=${qrLocal.longitude}`
+    ? `${window.location.origin}/checkin?local=${qrLocal.id_local}&lat=${qrLocal.latitude}&lng=${qrLocal.longitude}&empresa_id=${qrLocal.empresa_id || ''}`
     : '';
 
   const autoCadastroUrl = qrLocal
-    ? `${window.location.origin}/checkin?local=${qrLocal.id_local}&lat=${qrLocal.latitude}&lng=${qrLocal.longitude}&auto_cadastro=1`
+    ? `${window.location.origin}/checkin?local=${qrLocal.id_local}&lat=${qrLocal.latitude}&lng=${qrLocal.longitude}&empresa_id=${qrLocal.empresa_id || ''}&auto_cadastro=1`
     : '';
 
   const copyAutoLink = () => {

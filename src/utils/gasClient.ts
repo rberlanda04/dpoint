@@ -96,11 +96,18 @@ export class DataService {
 
         const result = await response.json();
         if (result.status === 'success') {
-          const db: AppDatabase = {
+          let db: AppDatabase = {
             funcionarios: dedupBy(result.funcionarios || [], (f: Funcionario) => f.id_funcionario),
             locais: dedupBy(result.locais || [], (l: LocalServico) => l.id_local),
             registros: dedupBy(result.registros || [], (r: RegistroPonto) => r.id_registro),
           };
+          if (empresaId) {
+            db = {
+              funcionarios: db.funcionarios.filter(f => f.empresa_id === empresaId),
+              locais: db.locais.filter(l => l.empresa_id === empresaId),
+              registros: db.registros.filter(r => r.empresa_id === empresaId),
+            };
+          }
           this.localDb = db;
           saveDatabase(db);
           return this.enrichRegistros(db);

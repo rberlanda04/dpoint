@@ -80,7 +80,6 @@ service cloud.firestore {
           || resource.data.email == ''
           || !resource.data.keys().hasAny(['email'])
           || (resource.data.keys().hasAny(['uid']) && resource.data.uid == request.auth.uid)
-          || !resource.data.keys().hasAny(['uid'])
         ));
       allow delete: if ownsEmpresaId('empresa_id');
     }
@@ -170,6 +169,33 @@ service cloud.firestore {
       allow create: if isAdmin() || isEmpresaAdmin();
       allow update: if isAdmin() || isEmpresaAdmin() || isAuthenticated();
       allow delete: if isAdmin();
+    }
+
+    // ─── OBRAS PESSOAIS (B2C Worker) ──────────────────────────
+    match /obras_pessoais/{obraId} {
+      allow read: if isAuthenticated() && resource.data.trabalhador_id == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.trabalhador_id == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.trabalhador_id == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.trabalhador_id == request.auth.uid;
+    }
+
+    // ─── SESSÕES DE TRABALHO (B2C Worker) ─────────────────────
+    match /sessoes_trabalho/{sessaoId} {
+      allow read: if isAuthenticated() && resource.data.trabalhador_id == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.trabalhador_id == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.trabalhador_id == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.trabalhador_id == request.auth.uid;
+    }
+
+    // ─── COMPARTILHAMENTOS (Relatórios compartilhados) ────────
+    match /compartilhamentos/{compartId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid
+        || resource.data.compartilhado_com == request.auth.uid
+      );
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
     }
   }
 }
